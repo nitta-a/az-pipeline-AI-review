@@ -33,11 +33,6 @@
             "path": "dist/LLMReviewerTask",
             "packagePath": "LLMReviewerTask"
         }
-        ,
-        {
-            "path": "overview.md",
-            "packagePath": "overview.md"
-        }
     ]
 
 }

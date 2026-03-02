@@ -28,7 +28,7 @@ jobs:
         run: npm ci
 
       - name: Build TypeScript
-        run: npx tsc
+        run: npm run build
 
       # タグ push と手動実行の両方でバージョンを解決する
       - name: Resolve version
@@ -73,17 +73,19 @@ jobs:
       # (node_modules は本番依存のみ)
       - name: Prepare task distribution folder
         run: |
+          set -e
           mkdir -p dist/LLMReviewerTask
 
-          # コンパイル済み JS とタスクマニフェストをコピー
-          cp index.js  dist/LLMReviewerTask/
-          cp task.json dist/LLMReviewerTask/
+          # タスク出力先は tsc が dist/LLMReviewerTask に出力する
+          mkdir -p dist/LLMReviewerTask
+          cp -f task.json dist/LLMReviewerTask/ || true
 
-          # 本番依存のみインストール
-          cp package.json      dist/LLMReviewerTask/
-          cp package-lock.json dist/LLMReviewerTask/
-          cd dist/LLMReviewerTask
-          npm ci --omit=dev
+          # package.json があればコピーして本番依存のみインストール
+          cp -f package.json dist/LLMReviewerTask/ || true
+          cp -f package-lock.json dist/LLMReviewerTask/ || true
+          pushd dist/LLMReviewerTask
+          npm ci --omit=dev --no-audit --no-fund
+          popd
 
       # VS Marketplace へパブリッシュ
       # 事前に GitHub Secrets へ MARKETPLACE_TOKEN を設定しておくこと

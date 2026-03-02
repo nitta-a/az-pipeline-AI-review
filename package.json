@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "check-types": "tsc --noEmit",
+    "build": "tsc && mkdir -p dist/LLMReviewerTask && cp -f task.json dist/LLMReviewerTask/ || true",
     "lint": "biome lint ./src",
     "lint:fix": "biome lint --write ./src",
     "format": "biome format ./src",

@@ -4,7 +4,7 @@
   "friendlyName": "LLM PR Reviewer",
   "description": "Reviews PR using LLM and manages comments",
   "category": "Build",
-  "author": "Your Name",
+  "author": "nitta-a",
   "version": { "Major": 0, "Minor": 1, "Patch": 0 },
   "instanceSelection": "None",
   "inputs": [

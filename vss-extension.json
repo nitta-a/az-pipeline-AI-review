@@ -32,6 +32,10 @@
         {
             "path": "dist/LLMReviewerTask",
             "packagePath": "LLMReviewerTask"
+        },
+        {
+            "path": "extension-icon.png",
+            "packagePath": "extension-icon.png"
         }
     ]
 

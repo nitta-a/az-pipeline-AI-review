@@ -99,6 +99,15 @@ jobs:
           rm -rf LLMReviewerTask || true
           cp -r dist/LLMReviewerTask ./LLMReviewerTask
 
+      - name: Verify assets
+        run: |
+          if [ ! -f "overview.md" ]; then
+            echo "Error: overview.md not found in root directory."
+            # 必要であればここでデフォルトの md を生成するか、エラー終了させる
+            exit 1
+          fi
+          ls -l overview.md vss-extension.json
+
       # VS Marketplace へパブリッシュ
       # 事前に GitHub Secrets へ MARKETPLACE_TOKEN を設定しておくこと
       # (Azure DevOps → User Settings → Personal Access Tokens → Marketplace: Publish)

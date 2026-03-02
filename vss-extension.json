@@ -1,0 +1,32 @@
+{
+    "manifestVersion": 1,
+    "id": "llm-pr-reviewer",
+    "publisher": "nitta-a",
+    "version": "0.1.0",
+    "name": "LLM PR Reviewer",
+    "description": "Reviews Pull Requests using LLM (Azure OpenAI / OpenAI / Anthropic / AWS Bedrock) and posts AI review comments to Azure Repos PRs.",
+    "public": true,
+    "categories": ["Azure Pipelines"],
+    "tags": ["PR", "code review", "AI", "LLM", "OpenAI", "Azure OpenAI", "Anthropic", "AWS Bedrock"],
+    "targets": [
+        {
+            "id": "Microsoft.VisualStudio.Services"
+        }
+    ],
+    "contributions": [
+        {
+            "id": "llm-reviewer-task",
+            "type": "ms.vss-distributed-task.task",
+            "targets": ["ms.vss-distributed-task.tasks"],
+            "properties": {
+                "name": "LLMReviewerTask"
+            }
+        }
+    ],
+    "files": [
+        {
+            "path": "dist/LLMReviewerTask",
+            "packagePath": "LLMReviewerTask"
+        }
+    ]
+}

@@ -1,0 +1,39 @@
+{
+  "name": "az-pipeline-ai-review",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "lint": "biome lint ./src",
+    "lint:fix": "biome lint --write ./src",
+    "format": "biome format ./src",
+    "format:fix": "biome format --write ./src"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nitta-a/az-pipeline-AI-review.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/nitta-a/az-pipeline-AI-review/issues"
+  },
+  "homepage": "https://github.com/nitta-a/az-pipeline-AI-review#readme",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1000.0",
+    "azure-devops-node-api": "^15.1.2",
+    "azure-pipelines-task-lib": "^5.2.6",
+    "openai": "^6.25.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.4",
+    "@types/node": "^24.0.0",
+    "@types/q": "^1.5.8",
+    "tfx-cli": "^0.23.1",
+    "typescript": "^5.9.3"
+  }
+}

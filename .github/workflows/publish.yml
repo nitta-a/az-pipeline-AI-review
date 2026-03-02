@@ -1,0 +1,96 @@
+name: Publish to VS Marketplace
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'バージョン番号 (例: 1.2.3)'
+        required: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npx tsc
+
+      # タグ push と手動実行の両方でバージョンを解決する
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "value=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            # "v1.2.3" → "1.2.3"
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # vss-extension.json と task.json のバージョンをタグに合わせて更新
+      - name: Update version in manifests
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+
+          node -e "
+            const fs = require('fs');
+            const f = 'vss-extension.json';
+            const j = JSON.parse(fs.readFileSync(f, 'utf8'));
+            j.version = process.env.VERSION;
+            fs.writeFileSync(f, JSON.stringify(j, null, 4));
+            console.log('vss-extension.json version:', j.version);
+          " VERSION="$VERSION"
+
+          node -e "
+            const fs = require('fs');
+            const f = 'task.json';
+            const j = JSON.parse(fs.readFileSync(f, 'utf8'));
+            j.version = {
+              Major: parseInt(process.env.MAJOR),
+              Minor: parseInt(process.env.MINOR),
+              Patch: parseInt(process.env.PATCH)
+            };
+            fs.writeFileSync(f, JSON.stringify(j, null, 4));
+            console.log('task.json version:', JSON.stringify(j.version));
+          " MAJOR="$MAJOR" MINOR="$MINOR" PATCH="$PATCH"
+
+      # dist/LLMReviewerTask/ にタスク実行に必要なファイルだけを集める
+      # (node_modules は本番依存のみ)
+      - name: Prepare task distribution folder
+        run: |
+          mkdir -p dist/LLMReviewerTask
+
+          # コンパイル済み JS とタスクマニフェストをコピー
+          cp index.js  dist/LLMReviewerTask/
+          cp task.json dist/LLMReviewerTask/
+
+          # 本番依存のみインストール
+          cp package.json      dist/LLMReviewerTask/
+          cp package-lock.json dist/LLMReviewerTask/
+          cd dist/LLMReviewerTask
+          npm ci --omit=dev
+
+      # VS Marketplace へパブリッシュ
+      # 事前に GitHub Secrets へ MARKETPLACE_TOKEN を設定しておくこと
+      # (Azure DevOps → User Settings → Personal Access Tokens → Marketplace: Publish)
+      - name: Publish extension to VS Marketplace
+        run: |
+          npx tfx-cli extension publish \
+            --manifest-globs vss-extension.json \
+            --token "${{ secrets.MARKETPLACE_TOKEN }}" \
+            --no-prompt

@@ -41,12 +41,19 @@ jobs:
             echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           fi
 
-      # vss-extension.json と task.json のバージョンをタグに合わせて更新
-      - name: Update version in manifests
+      # タグ push と手順内で解決したバージョンを環境変数へ設定
+      - name: Set version envs
+        id: set_version_envs
         run: |
           VERSION="${{ steps.version.outputs.value }}"
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "MAJOR=$MAJOR" >> $GITHUB_ENV
+          echo "MINOR=$MINOR" >> $GITHUB_ENV
+          echo "PATCH=$PATCH" >> $GITHUB_ENV
 
+      - name: Update vss-extension.json
+        run: |
           node -e "
             const fs = require('fs');
             const f = 'vss-extension.json';
@@ -54,8 +61,10 @@ jobs:
             j.version = process.env.VERSION;
             fs.writeFileSync(f, JSON.stringify(j, null, 4));
             console.log('vss-extension.json version:', j.version);
-          " VERSION="$VERSION"
+          "
 
+      - name: Update task.json
+        run: |
           node -e "
             const fs = require('fs');
             const f = 'task.json';
@@ -65,9 +74,9 @@ jobs:
               Minor: parseInt(process.env.MINOR),
               Patch: parseInt(process.env.PATCH)
             };
-            fs.writeFileSync(f, JSON.stringify(j, null, 4));
+            fs.writeFileSync(f, JSON.stringify(j, null, 2));
             console.log('task.json version:', JSON.stringify(j.version));
-          " MAJOR="$MAJOR" MINOR="$MINOR" PATCH="$PATCH"
+          "
 
       # dist/LLMReviewerTask/ にタスク実行に必要なファイルだけを集める
       # (node_modules は本番依存のみ)

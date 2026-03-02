@@ -1,18 +1,22 @@
 {
+  "$schema": "https://raw.githubusercontent.com/Microsoft/azure-pipelines-task-lib/master/tasks.schema.json",
   "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
   "name": "LLMReviewerTask",
   "friendlyName": "LLM PR Reviewer",
   "description": "Reviews PR using LLM and manages comments",
+  "helpMarkDown": "",
   "category": "Build",
   "author": "nitta-a",
   "version": { "Major": 0, "Minor": 1, "Patch": 0 },
   "instanceSelection": "None",
-  "instanceNameFormat": "LLM PR Reviewer",
+  "instanceNameFormat": "LLM PR Reviewer: $(llmConnectionString)",
+  "visibility": ["Build", "Release"],
   "inputs": [
     {
       "name": "llmConnectionString",
       "type": "string",
       "label": "LLM Connection String",
+      "defaultValue": "",
       "required": true,
       "helpMarkDown": "LLM プロバイダーへの接続文字列。セミコロン区切りの key=value 形式で指定します。\n\nAzure OpenAI: provider=azure;endpoint=https://<resource>.openai.azure.com;key=<api-key>;model=gpt-4o;api_version=2024-02-01\n\nOpenAI: provider=openai;key=sk-<api-key>;model=gpt-4o\n\nAnthropic Claude: provider=anthropic;key=sk-ant-<api-key>;model=claude-3-5-sonnet-20241022\n\nAWS Bedrock: provider=bedrock;region=us-east-1;access_key=<access-key>;secret_key=<secret-key>;model=anthropic.claude-3-5-sonnet-20241022-v2:0"
     }

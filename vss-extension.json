@@ -2,7 +2,6 @@
     "manifestVersion": 1,
     "id": "llm-pr-reviewer",
     "publisher": "nitta-a",
-    "version": "0.1.0",
     "name": "LLM PR Reviewer",
     "description": "Reviews Pull Requests using LLM (Azure OpenAI / OpenAI / Anthropic / AWS Bedrock) and posts AI review comments to Azure Repos PRs.",
     "public": true,

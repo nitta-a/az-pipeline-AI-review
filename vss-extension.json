@@ -13,6 +13,11 @@
             "id": "Microsoft.VisualStudio.Services"
         }
     ],
+    "content": {
+        "details": {
+            "path": "overview.md"
+        }
+    },
     "contributions": [
         {
             "id": "llm-reviewer-task",

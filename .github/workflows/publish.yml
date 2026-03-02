@@ -86,6 +86,9 @@ jobs:
           pushd dist/LLMReviewerTask
           npm ci --omit=dev --no-audit --no-fund
           popd
+          # tfx はルート直下の LLMReviewerTask を参照することがあるため、コピーしておく
+          rm -rf LLMReviewerTask || true
+          cp -r dist/LLMReviewerTask ./LLMReviewerTask
 
       # VS Marketplace へパブリッシュ
       # 事前に GitHub Secrets へ MARKETPLACE_TOKEN を設定しておくこと

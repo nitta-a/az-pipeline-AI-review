@@ -6,6 +6,10 @@
     "name": "LLM PR Reviewer",
     "description": "Reviews Pull Requests using LLM (Azure OpenAI / OpenAI / Anthropic / AWS Bedrock) and posts AI review comments to Azure Repos PRs.",
     "public": true,
+    "scopes": [
+        "vso.code_write",
+        "vso.code_status"
+    ],
     "categories": ["Azure Pipelines"],
     "tags": ["PR", "code review", "AI", "LLM", "OpenAI", "Azure OpenAI", "Anthropic", "AWS Bedrock"],
     "targets": [
@@ -21,6 +25,10 @@
             "path": "overview.md"
         }
     },
+    "repository": {
+        "type": "git",
+        "uri": "https://github.com/nitta-a/az-pipeline-AI-review"
+    },
     "contributions": [
         {
             "id": "llm-reviewer-task",
@@ -34,11 +42,7 @@
     "files": [
         {
             "path": "dist/LLMReviewerTask",
-            "packagePath": "LLMReviewerTask"
-        },
-        {
-            "path": "extension-icon.png",
-            "packagePath": "extension-icon.png"
+            "addressable": true
         }
     ]
 

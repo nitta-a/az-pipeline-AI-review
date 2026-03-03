@@ -6,6 +6,7 @@
   "scripts": {
     "check-types": "tsc --noEmit",
     "build": "tsc && mkdir -p dist/LLMReviewerTask && cp -f task.json dist/LLMReviewerTask/ || true",
+    "bundle": "esbuild src/index.ts --bundle --platform=node --target=node20 --outfile=dist/LLMReviewerTask/index.js --sourcemap",
     "lint": "biome lint ./src",
     "lint:fix": "biome lint --write ./src",
     "format": "biome format ./src",
@@ -39,6 +40,7 @@
     "@types/q": "^1.5.8",
     "jest": "^29.7.0",
     "tfx-cli": "^0.23.1",
+    "esbuild": "^0.18.0",
     "ts-jest": "^29.3.0",
     "typescript": "^5.9.3"
   }

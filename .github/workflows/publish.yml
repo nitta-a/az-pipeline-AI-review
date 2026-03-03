@@ -85,16 +85,12 @@ jobs:
           set -e
           mkdir -p dist/LLMReviewerTask
 
-          # タスク出力先は tsc が dist/LLMReviewerTask に出力する
-          mkdir -p dist/LLMReviewerTask
+          # tsc が生成するファイルと task.json を配置
           cp -f task.json dist/LLMReviewerTask/ || true
 
-          # package.json があればコピーして本番依存のみインストール
-          cp -f package.json dist/LLMReviewerTask/ || true
-          cp -f package-lock.json dist/LLMReviewerTask/ || true
-          pushd dist/LLMReviewerTask
-          npm ci --omit=dev --no-audit --no-fund
-          popd
+          # バンドルして依存を単一ファイルにまとめる（node_modules を含めない）
+          npm run bundle
+
           # tfx はルート直下の LLMReviewerTask を参照することがあるため、コピーしておく
           rm -rf LLMReviewerTask || true
           cp -r dist/LLMReviewerTask ./LLMReviewerTask

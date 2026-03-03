@@ -103,7 +103,16 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
       }
       // Many Foundry endpoints are OpenAI-compatible. Try a generic OpenAI-compatible HTTP call.
       const base = params.endpoint.replace(/\/$/, "");
-      const url = `${base}/v1/chat/completions`;
+      // If the provided endpoint already includes a model-specific path (e.g. "/chat/completions" or
+      // "/responses"), assume it's the full URL and use it directly. This allows Azure/Foundry
+      // customers to specify the OpenAI-compatible path including query parameters like
+      // `?api-version=...`.
+      let url: string;
+      if (/\/v1\/chat\.completions|\/responses|openai/i.test(base)) {
+        url = base;
+      } else {
+        url = `${base}/v1/chat/completions`;
+      }
       const payload = {
         model: params.model,
         messages: [

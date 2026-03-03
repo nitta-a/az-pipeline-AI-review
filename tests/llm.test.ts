@@ -172,6 +172,62 @@ describe("callLlm – anthropic", () => {
   });
 });
 
+// ─── Foundry (generic) ─────────────────────────────────────────────────────────
+describe("callLlm – foundry", () => {
+  const baseParams: ConnectionParams = {
+    provider: "foundry",
+    endpoint: "https://example.com",
+    key: "foundry-key",
+    model: "gpt-5-mini",
+  };
+
+  beforeEach(() => {
+    // reset global fetch mock
+    (global as any).fetch = jest.fn();
+  });
+
+  test("デフォルトエンドポイントには /v1/chat/completions を付与", async () => {
+    const mockResponse = {
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "Foundry result" } }] }),
+    };
+    (global as any).fetch.mockResolvedValue(mockResponse);
+
+    const result = await callLlm(baseParams, "diff text");
+    expect(result).toBe("Foundry result");
+    expect((global as any).fetch).toHaveBeenCalledWith(
+      "https://example.com/v1/chat/completions",
+      expect.any(Object),
+    );
+  });
+
+  test("すでに /responses パスを含むエンドポイントはそのまま使用", async () => {
+    const params = { ...baseParams, endpoint: "https://example.com/openai/responses?api-version=2025-04-01-preview" };
+    const mockResponse = {
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "OK" } }] }),
+    };
+    (global as any).fetch.mockResolvedValue(mockResponse);
+
+    const result = await callLlm(params, "diff");
+    expect(result).toBe("OK");
+    expect((global as any).fetch).toHaveBeenCalledWith(
+      "https://example.com/openai/responses?api-version=2025-04-01-preview",
+      expect.any(Object),
+    );
+  });
+
+  test("endpoint がない場合はエラー", async () => {
+    const p = { ...baseParams, endpoint: undefined } as any;
+    await expect(callLlm(p, "diff")).rejects.toThrow("endpoint");
+  });
+
+  test("key がない場合はエラー", async () => {
+    const p = { ...baseParams, key: undefined } as any;
+    await expect(callLlm(p, "diff")).rejects.toThrow("key");
+  });
+});
+
 // ─── AWS Bedrock ───────────────────────────────────────────────────────────────
 describe("callLlm – bedrock", () => {
   const baseParams: ConnectionParams = {

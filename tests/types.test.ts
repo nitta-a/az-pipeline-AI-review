@@ -46,6 +46,38 @@ describe("parseConnectionString", () => {
     expect((result as Record<string, unknown>).secret_key).toBeUndefined();
   });
 
+  test("Azure AI Foundry の接続文字列を endpoint キーでパースできる", () => {
+    const result = parseConnectionString(
+      "provider=foundry;endpoint=https://my-project.services.ai.azure.com;key=my-key;model=gpt-4o",
+    );
+    expect(result.provider).toBe("foundry");
+    expect(result.endpoint).toBe("https://my-project.services.ai.azure.com");
+    expect(result.key).toBe("my-key");
+    expect(result.model).toBe("gpt-4o");
+  });
+
+  test("Azure AI Foundry の接続文字列を target キーでパースできる", () => {
+    const result = parseConnectionString(
+      "provider=foundry;target=https://my-project.services.ai.azure.com;key=my-key;model=gpt-4o",
+    );
+    expect(result.provider).toBe("foundry");
+    expect(result.endpoint).toBe("https://my-project.services.ai.azure.com");
+    expect(result.key).toBe("my-key");
+    expect(result.model).toBe("gpt-4o");
+    expect((result as Record<string, unknown>).target).toBeUndefined();
+  });
+
+  test("Azure AI Foundry の接続文字列を target_uri キーでパースできる", () => {
+    const result = parseConnectionString(
+      "provider=foundry;target_uri=https://my-project.services.ai.azure.com;key=my-key;model=gpt-4o",
+    );
+    expect(result.provider).toBe("foundry");
+    expect(result.endpoint).toBe("https://my-project.services.ai.azure.com");
+    expect(result.key).toBe("my-key");
+    expect(result.model).toBe("gpt-4o");
+    expect((result as Record<string, unknown>).target_uri).toBeUndefined();
+  });
+
   test("value に = を含む URL でも正しくパースできる", () => {
     // endpoint=https://example.com の部分は idx=最初の = の位置で分割されるべき
     const result = parseConnectionString(

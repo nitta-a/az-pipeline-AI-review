@@ -227,6 +227,98 @@ describe("callLlm – bedrock", () => {
   });
 });
 
+// ─── Azure AI Foundry ──────────────────────────────────────────────────────────
+describe("callLlm – foundry", () => {
+  const baseParams: ConnectionParams = {
+    provider: "foundry",
+    endpoint: "https://my-project.services.ai.azure.com",
+    key: "foundry-key",
+    model: "gpt-4o",
+  };
+
+  beforeEach(() => {
+    global.fetch = jest.fn();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test("LLM の回答文字列を返す (choices[0].message.content)", async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "Foundry レビュー結果" } }] }),
+    });
+
+    const result = await callLlm(baseParams, "diff text");
+    expect(result).toBe("Foundry レビュー結果");
+  });
+
+  test("fetch に正しい URL と Authorization ヘッダーが渡される", async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "ok" } }] }),
+    });
+
+    await callLlm(baseParams, "diff");
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://my-project.services.ai.azure.com/v1/chat/completions",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer foundry-key",
+        }),
+      }),
+    );
+  });
+
+  test("末尾スラッシュ付き endpoint でも /v1/chat/completions が正しく組み立てられる", async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "ok" } }] }),
+    });
+
+    const params = { ...baseParams, endpoint: "https://my-project.services.ai.azure.com/" };
+    await callLlm(params, "diff");
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://my-project.services.ai.azure.com/v1/chat/completions",
+      expect.anything(),
+    );
+  });
+
+  test("HTTP エラー時は例外をスロー", async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: async () => "Unauthorized",
+    });
+
+    await expect(callLlm(baseParams, "diff")).rejects.toThrow("401");
+  });
+
+  test("endpoint がない場合はエラーをスロー", async () => {
+    const params = { ...baseParams, endpoint: undefined };
+    await expect(callLlm(params, "diff")).rejects.toThrow("endpoint");
+  });
+
+  test("key がない場合はエラーをスロー", async () => {
+    const params = { ...baseParams, key: undefined };
+    await expect(callLlm(params, "diff")).rejects.toThrow("key");
+  });
+
+  test("choices が空の場合は空文字列を返す", async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [] }),
+    });
+
+    const result = await callLlm(baseParams, "diff");
+    expect(result).toBe("");
+  });
+});
+
 // ─── 未対応プロバイダー ────────────────────────────────────────────────────────
 describe("callLlm – 未対応プロバイダー", () => {
   test("未知の provider はエラーをスロー", async () => {
@@ -237,5 +329,10 @@ describe("callLlm – 未対応プロバイダー", () => {
   test("エラーメッセージにプロバイダー名が含まれる", async () => {
     const params: ConnectionParams = { provider: "gcp-vertex", model: "gemini" };
     await expect(callLlm(params, "diff")).rejects.toThrow("gcp-vertex");
+  });
+
+  test("エラーメッセージに foundry が候補として含まれる", async () => {
+    const params: ConnectionParams = { provider: "unknown", model: "some-model" };
+    await expect(callLlm(params, "diff")).rejects.toThrow("foundry");
   });
 });

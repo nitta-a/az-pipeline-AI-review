@@ -133,7 +133,7 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
 
     default:
       throw new Error(
-        `未対応のプロバイダーです: "${params.provider}"。azure / openai / anthropic / bedrock のいずれかを指定してください。`,
+        `未対応のプロバイダーです: "${params.provider}"。azure / openai / anthropic / bedrock / foundry のいずれかを指定してください。`,
       );
   }
 }

@@ -217,6 +217,21 @@ describe("callLlm – foundry", () => {
     );
   });
 
+  test("Responses API エンドポイントでは input パラメータを使う", async () => {
+    const params = { ...baseParams, endpoint: "https://example.com/openai/responses?api-version=2025-04-01-preview" };
+    const mockResponse = {
+      ok: true,
+      json: async () => ({ choices: [] }),
+    };
+    (global as any).fetch.mockResolvedValue(mockResponse);
+
+    await callLlm(params, "diff text");
+    const callArgs = (global as any).fetch.mock.calls[0];
+    const sentBody = JSON.parse(callArgs[1].body);
+    expect(sentBody.input).toBeDefined();
+    expect(sentBody.messages).toBeUndefined();
+  });
+
   test("endpoint がない場合はエラー", async () => {
     const p = { ...baseParams, endpoint: undefined } as any;
     await expect(callLlm(p, "diff")).rejects.toThrow("endpoint");

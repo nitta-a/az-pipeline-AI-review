@@ -113,13 +113,22 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
       } else {
         url = `${base}/v1/chat/completions`;
       }
-      const payload = {
-        model: params.model,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userMessage },
-        ],
-      };
+
+      const messages = [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userMessage },
+      ];
+
+      // Responses API (used by newer Foundry/Cognitive Services endpoints) expects the input
+      // in an `input` field instead of `messages`.
+      const isResponsesApi = /\/responses\b/i.test(url);
+      const payload: Record<string, unknown> = { model: params.model };
+      if (isResponsesApi) {
+        payload.input = messages;
+      } else {
+        payload.messages = messages;
+      }
+
       const res = await fetch(url, {
         method: "POST",
         headers: {

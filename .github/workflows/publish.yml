@@ -104,6 +104,34 @@ jobs:
           fi
           ls -l overview.md vss-extension.json
 
+      - name: Ensure icon is 128x128
+        run: |
+          set -e
+          ICON=extension-icon.png
+          if [ -f "$ICON" ]; then
+            if command -v identify >/dev/null 2>&1; then
+              W=$(identify -format "%w" "$ICON")
+              H=$(identify -format "%h" "$ICON")
+            else
+              read W H < <(node -e "const fs=require('fs');const b=fs.readFileSync(process.argv[1]);console.log(b.readUInt32BE(16),' ',b.readUInt32BE(20));" $ICON)
+            fi
+            if [ "$W" -lt 128 ] || [ "$H" -lt 128 ] || [ "$W" -ne "$H" ]; then
+              if ! command -v convert >/dev/null 2>&1; then
+                sudo apt-get update && sudo apt-get install -y imagemagick
+              fi
+              convert "$ICON" -resize 128x128 -background none -gravity center -extent 128x128 "$ICON"
+              echo "Resized $ICON to 128x128"
+            else
+              echo "Icon OK: ${W}x${H}"
+            fi
+          else
+            if ! command -v convert >/dev/null 2>&1; then
+              sudo apt-get update && sudo apt-get install -y imagemagick
+            fi
+            convert -size 128x128 xc:'#2b6cb0' -gravity center -pointsize 36 -fill white -annotate 0 'AI' "$ICON"
+            echo "Generated placeholder $ICON"
+          fi
+
       # VS Marketplace へパブリッシュ
       # 事前に GitHub Secrets へ MARKETPLACE_TOKEN を設定しておくこと
       # (Azure DevOps → User Settings → Personal Access Tokens → Marketplace: Publish)

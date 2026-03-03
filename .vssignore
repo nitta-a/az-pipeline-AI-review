@@ -1,0 +1,30 @@
+# Exclude everything by default, then whitelist required package files
+*
+
+# Whitelist the extension manifest and dist package
+!vss-extension.json
+!overview.md
+!extension-icon.png
+!extension-icon@2x.png
+!extension-icon@4x.png
+!dist/
+!dist/**
+
+# Common large folders to ensure they're excluded if present
+node_modules/
+src/
+tests/
+.git/
+.github/
+coverage/
+dist-src/
+*.ts
+*.map
+*.log
+jest.config.js
+tsconfig.json
+package.json
+package-lock.json
+yarn.lock
+.vscode/
+__pycache__/

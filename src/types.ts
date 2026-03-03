@@ -26,6 +26,9 @@ const KEY_MAP: Record<string, string> = {
   ["api_version"]: "apiVersion",
   ["access_key"]: "accessKey",
   ["secret_key"]: "secretKey",
+  ["target"]: "endpoint",
+  ["target_uri"]: "endpoint",
+  ["targeturi"]: "endpoint",
 };
 
 export function parseConnectionString(raw: string): ConnectionParams {

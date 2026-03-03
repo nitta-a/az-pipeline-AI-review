@@ -41,7 +41,7 @@
     ],
     "files": [
         {
-            "path": "dist/LLMReviewerTask",
+            "path": "LLMReviewerTask",
             "addressable": true
         }
     ]

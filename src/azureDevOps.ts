@@ -42,6 +42,9 @@ export async function getPrDiff(gitApi: IGitApi, repoId: string, prId: number): 
       continue;
     }
 
+    // ログ出力: 処理中のファイルを通知
+    console.log(`処理中のファイル: ${filePath}`);
+
     // changeType: 1=Add, 2=Edit, 4=Delete
     const changeTypeNum = entry.changeType ?? 0;
     const changeLabel =

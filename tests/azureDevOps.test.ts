@@ -195,6 +195,29 @@ describe("getPrDiff", () => {
     expect(gitApi.getItemContent).toHaveBeenCalledTimes(1);
   });
 
+  test("各ファイルの処理時に console.log でパスを出力する", async () => {
+    const spy = jest.spyOn(console, "log").mockImplementation(() => {});
+
+    const gitApi = makeMockGitApi({
+      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/feature/log" }),
+      getPullRequestIterations: jest.fn().mockResolvedValue([{ id: 1 }]),
+      getPullRequestIterationChanges: jest.fn().mockResolvedValue({
+        changeEntries: [
+          { item: { path: "/src/a.ts" }, changeType: 2 },
+          { item: { path: "/src/b.ts" }, changeType: 1 },
+        ],
+      }),
+      getItemContent: jest.fn().mockResolvedValue(makeStream("code")),
+    });
+
+    await getPrDiff(gitApi as any, "repo-1", 5);
+
+    expect(spy).toHaveBeenCalledWith("処理中のファイル: /src/a.ts");
+    expect(spy).toHaveBeenCalledWith("処理中のファイル: /src/b.ts");
+
+    spy.mockRestore();
+  });
+
   test("sourceRefName が undefined の場合は空文字列をブランチとして使う", async () => {
     const gitApi = makeMockGitApi({
       getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: undefined }),

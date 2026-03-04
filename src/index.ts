@@ -6,6 +6,12 @@ import { AI_REVIEW_MARKER } from "./constants";
 import { callLlm } from "./llm";
 import { parseConnectionString } from "./types";
 
+export function formatReviewComment(reviewResult: string): string {
+  // LLM からの返信が空文字の場合は明示的に "コメントはありません。" と表示する
+  const body = reviewResult.trim() || "コメントはありません。";
+  return `${AI_REVIEW_MARKER}\n## 🤖 AI コードレビュー\n\n${body}`;
+}
+
 async function run() {
   try {
     // 1. パイプライン入力値・環境変数の取得と検証
@@ -45,7 +51,7 @@ async function run() {
     const reviewResult = await callLlm(connParams, diffText);
 
     // 6. 新規コメントを投稿（マーカー付き）
-    const commentBody = `${AI_REVIEW_MARKER}\n## 🤖 AI コードレビュー\n\n${reviewResult}`;
+    const commentBody = formatReviewComment(reviewResult);
     await gitApi.createThread(
       {
         comments: [

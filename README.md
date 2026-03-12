@@ -128,6 +128,9 @@ provider=foundry;target_uri=https://<project>.services.ai.azure.com;key=<api-key
 
 ### 3. PR トリガーの設定例（YAML 全体）
 
+> **重要：** PR ビルドで正確な差分を取得するために、`checkout` ステップで `fetchDepth: 0` を指定してください。
+> これにより `refs/pull/x/merge` 環境で `origin/main` との差分が確実に取得できます。
+
 ```yaml
 trigger: none
 
@@ -143,10 +146,46 @@ jobs:
     pool:
       vmImage: ubuntu-latest
     steps:
+      - checkout: self
+        fetchDepth: 0
+
       - task: LLMReviewerTask@0
         displayName: LLM PR Review
         inputs:
           llmConnectionString: 'provider=azure;endpoint=$(AOAI_ENDPOINT);key=$(AOAI_KEY);model=gpt-4o'
+```
+
+#### Azure AI Foundry（Cognitive Services エンドポイント）の設定例
+
+Azure AI Foundry の Cognitive Services エンドポイント（`cognitiveservices.azure.com`）を使用する場合は、`provider=azure` と正しい `api_version` を指定してください。
+
+> **api_version について：** 新しいモデル（`gpt-4o-mini` など）は古い API バージョン（デフォルトの `2024-02-01`）では利用できないため、モデルに対応したバージョンを明示的に指定する必要があります。
+> 誤ったバージョンを指定すると `404 DeploymentNotFound` や `400 BadRequest` エラーが発生し、LLM への呼び出しが失敗します。
+> 使用するモデルがサポートする API バージョンは [Azure OpenAI モデルのドキュメント](https://learn.microsoft.com/azure/ai-services/openai/concepts/models) を参照してください。
+
+```yaml
+      - task: LLMReviewerTask@0
+        displayName: LLM PR Review
+        inputs:
+          llmConnectionString: >-
+            provider=azure;
+            endpoint=$(AOAI_ENDPOINT);
+            key=$(AOAI_KEY);
+            model=gpt-4o-mini;
+            api_version=2025-04-01-preview
+```
+
+または `provider=foundry` で OpenAI 互換エンドポイントを直接指定することもできます：
+
+```yaml
+      - task: LLMReviewerTask@0
+        displayName: LLM PR Review
+        inputs:
+          llmConnectionString: >-
+            provider=foundry;
+            endpoint=https://<resource>.cognitiveservices.azure.com/openai/deployments/<model>/chat/completions?api-version=2025-04-01-preview;
+            key=$(AOAI_KEY);
+            model=gpt-4o-mini
 ```
 
 ## パイプライン実行時に必要な権限
@@ -177,6 +216,51 @@ jobs:
    - `Read`
 
 または **Project Settings** → **Pipelines** → **Settings** で **Disable requesting for access to repos not already granted** が無効になっていることを確認してください。
+
+## トラブルシューティング
+
+### PR にコメントが投稿されない・「コメントはありません。」と表示される
+
+パイプラインが成功（Green）しているにも関わらず PR にコメントが投稿されない、または「コメントはありません。」とだけ表示される場合は、以下を確認してください。
+
+#### 1. 差分（Diff）が空でないか確認する
+
+パイプラインのログで `##[group]🔍 Git Diff (LLM 送信前)` セクションを展開して差分テキストを確認してください。
+
+**差分が空の主な原因：**
+
+- `checkout: self` に `fetchDepth: 0` が指定されていない（浅いクローンで差分が取れない）
+- PR のイテレーションに変更ファイルが登録されていない
+
+```yaml
+# ✅ 推奨設定
+steps:
+  - checkout: self
+    fetchDepth: 0
+```
+
+#### 2. LLM へのプロンプトと返答を確認する
+
+パイプラインのログで以下のグループを確認してください：
+
+| ロググループ | 内容 |
+|---|---|
+| `##[group]📤 LLM 送信プロンプト` | LLM に送信したシステムプロンプトとユーザーメッセージ全文 |
+| `##[group]🤖 LLM レスポンス (生)` | LLM から返ってきた生のレスポンステキスト |
+| `##[group]📝 PR コメント投稿内容` | PR に実際に投稿されるコメント本文（Markdown） |
+
+#### 3. Azure AI Foundry の API バージョンを確認する
+
+`gpt-4o-mini` など新しいモデルを使用する場合は、`api_version=2025-04-01-preview` を指定してください。
+デフォルト値 `2024-02-01` は古いモデル向けであり、新しいモデルで使用すると `404 DeploymentNotFound` エラーが発生して LLM の呼び出しが失敗します。
+
+```
+provider=azure;endpoint=$(AOAI_ENDPOINT);key=$(AOAI_KEY);model=gpt-4o-mini;api_version=2025-04-01-preview
+```
+
+#### 4. Build Service の権限を確認する
+
+「コメントの投稿に失敗しました」というエラーが出る場合は、Build Service アカウントに `Contribute to pull requests` 権限が付与されているか確認してください。
 
 ## ライセンス
 

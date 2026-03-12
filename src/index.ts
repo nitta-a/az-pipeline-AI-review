@@ -46,12 +46,29 @@ async function run() {
     const diffText = await getPrDiff(gitApi, repoId, prId);
     console.log(`差分テキスト長: ${diffText.length} 文字`);
 
+    // デバッグ: 取得した差分の全文をログに出力
+    console.log("##[group]🔍 Git Diff (LLM 送信前)");
+    console.log(diffText || "(差分が空です)");
+    console.log("##[endgroup]");
+
     // 5. LLM へレビューを依頼
     console.log(`LLM (${connParams.provider}) にレビューを依頼しています...`);
     const reviewResult = await callLlm(connParams, diffText);
 
+    // デバッグ: LLM からの生レスポンスをログに出力
+    console.log("##[group]🤖 LLM レスポンス (生)");
+    console.log(reviewResult || "(レスポンスが空です)");
+    console.log("##[endgroup]");
+
     // 6. 新規コメントを投稿（マーカー付き）
     const commentBody = formatReviewComment(reviewResult);
+
+    // デバッグ: PR コメントとして投稿する最終本文をログに出力
+    console.log("##[group]📝 PR コメント投稿内容");
+    console.log(commentBody);
+    console.log("##[endgroup]");
+
+    console.log("PR にコメントスレッドを投稿しています...");
     await gitApi.createThread(
       {
         comments: [

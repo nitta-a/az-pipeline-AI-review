@@ -39,4 +39,37 @@ describe("constants", () => {
     // 以前の「指摘なしは LGTM とだけ出力」という指示は削除済み
     expect(SYSTEM_PROMPT).not.toContain("\"LGTM\"とだけ出力");
   });
+
+  test("SYSTEM_PROMPT にリーダブルコード観点が含まれる", () => {
+    expect(SYSTEM_PROMPT).toContain("リーダブルコード");
+  });
+
+  test("SYSTEM_PROMPT に命名の妥当性チェックが含まれる", () => {
+    expect(SYSTEM_PROMPT).toContain("命名の妥当性");
+  });
+
+  test("SYSTEM_PROMPT に関数の単一責任チェックが含まれる", () => {
+    expect(SYSTEM_PROMPT).toContain("関数の単一責任");
+  });
+
+  test("SYSTEM_PROMPT にネストの深さチェックが含まれる", () => {
+    expect(SYSTEM_PROMPT).toContain("ネストの深さ");
+  });
+
+  test("SYSTEM_PROMPT にマジックナンバー排除チェックが含まれる", () => {
+    expect(SYSTEM_PROMPT).toContain("マジックナンバー");
+  });
+
+  test("SYSTEM_PROMPT に Early Return チェックが含まれる", () => {
+    expect(SYSTEM_PROMPT).toContain("Early Return");
+  });
+
+  test("SYSTEM_PROMPT に認知負荷チェックが含まれる", () => {
+    expect(SYSTEM_PROMPT).toContain("認知負荷");
+  });
+
+  test("SYSTEM_PROMPT にコードスニペット提示の必須指示が含まれる", () => {
+    expect(SYSTEM_PROMPT).toContain("コードスニペット");
+    expect(SYSTEM_PROMPT).toContain("必ず提示");
+  });
 });

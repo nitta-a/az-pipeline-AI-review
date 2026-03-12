@@ -11,6 +11,12 @@ import type { ConnectionParams } from "./types";
 export async function callLlm(params: ConnectionParams, diffText: string): Promise<string> {
   const userMessage = `以下の PR の変更内容をレビューしてください:\n\n${diffText}`;
 
+  // デバッグ: LLM に送信するプロンプト全文をログに出力
+  console.log("##[group]📤 LLM 送信プロンプト");
+  console.log(`[System]\n${SYSTEM_PROMPT}`);
+  console.log(`[User]\n${userMessage}`);
+  console.log("##[endgroup]");
+
   switch (params.provider) {
     case "azure": {
       if (!params.endpoint || !params.key) {

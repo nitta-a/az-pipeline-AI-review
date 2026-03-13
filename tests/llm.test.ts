@@ -147,7 +147,7 @@ describe("callLlm – anthropic", () => {
       expect.objectContaining({
         model: "claude-3-5-sonnet-20241022",
         // biome-ignore lint/style/useNamingConvention: Anthropic SDK requires snake_case
-        max_tokens: 4096,
+        max_tokens: 40960,
       }),
     );
   });
@@ -425,7 +425,7 @@ describe("callLlm – foundry", () => {
 
     const callArgs = (global.fetch as jest.Mock).mock.calls[0];
     const sentBody = JSON.parse(callArgs[1].body);
-    expect(sentBody.max_tokens).toBe(4096);
+    expect(sentBody.max_tokens).toBe(40960);
   });
 
   test("接続文字列の maxTokens が反映される", async () => {

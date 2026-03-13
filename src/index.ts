@@ -17,7 +17,9 @@ export function formatReviewComment(reviewResult: string): string {
  * 行頭が `- **` または `## ` で始まる箇所を区切りとして分割する。
  */
 export function splitIntoComments(reviewText: string): string[] {
-  if (!reviewText.trim()) { return []; }
+  if (!reviewText.trim()) {
+    return [];
+  }
   // `- **` (指摘箇所) または `## ` (セクションヘッダー) で始まる行の直前で分割
   const items = reviewText.split(/\n(?=- \*\*|## )/);
   return items.map((item) => item.trim()).filter((item) => item.length > 0);

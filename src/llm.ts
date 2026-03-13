@@ -4,7 +4,7 @@ import OpenAi, { AzureOpenAI } from "openai";
 import { SYSTEM_PROMPT } from "./constants";
 import type { ConnectionParams } from "./types";
 
-/** 接続文字列の maxTokens を数値に変換する（デフォルト: 4096） */
+/** 接続文字列の maxTokens を数値に変換する（デフォルト: 40960） */
 function resolveMaxTokens(params: ConnectionParams): number {
   if (params.maxTokens) {
     const n = Number(params.maxTokens);
@@ -12,7 +12,7 @@ function resolveMaxTokens(params: ConnectionParams): number {
       return n;
     }
   }
-  return 4096;
+  return 40960;
 }
 
 /** 接続文字列の temperature を数値に変換する（デフォルト: undefined＝プロバイダー任せ） */

@@ -125,12 +125,12 @@ provider=foundry;target_uri=https://<project>.services.ai.azure.com;key=<api-key
 
 | パラメータ | 説明 | デフォルト |
 |---|---|---|
-| `max_tokens` | LLM の最大出力トークン数 | `4096` |
+| `max_tokens` | LLM の最大出力トークン数 | `40960` |
 | `temperature` | 生成の温度 (0.0〜2.0) | プロバイダーのデフォルト値 |
 | `debug` | `true` にするとテスト用の短いプロンプトを送信 | `false` |
 
 ```
-provider=foundry;endpoint=https://...;key=<key>;model=gpt-4o;max_tokens=4096;temperature=0.2
+provider=foundry;endpoint=https://...;key=<key>;model=gpt-4o;max_tokens=40960;temperature=0.2
 ```
 
 デバッグモード（LLM 接続テスト用）：

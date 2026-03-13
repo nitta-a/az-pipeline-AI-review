@@ -56,7 +56,7 @@ async function run() {
     console.log(
       `接続パラメータ: provider=${connParams.provider}, model=${connParams.model},` +
         ` apiVersion=${connParams.apiVersion ?? "(default)"},` +
-        ` maxTokens=${connParams.maxTokens ?? "(default:4096)"},` +
+        ` maxTokens=${connParams.maxTokens ?? "(default:40960)"},` +
         ` temperature=${connParams.temperature ?? "(default)"},` +
         ` debug=${connParams.debug ?? "false"}`,
     );

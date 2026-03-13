@@ -1,9 +1,11 @@
+import * as path from "node:path";
 import * as azdev from "azure-devops-node-api";
 import type { IGitApi } from "azure-devops-node-api/GitApi";
 import * as tl from "azure-pipelines-task-lib/task";
 import { deleteExistingAiReviewComments, getChangedFiles } from "./azureDevOps";
 import { AI_REVIEW_MARKER, RATE_LIMIT_DELAY_MS } from "./constants";
-import { callLlm } from "./llm";
+import { indexKnowledgeFiles, loadKnowledgeContents } from "./knowledge";
+import { callLlm, selectKnowledgeFiles } from "./llm";
 import { parseConnectionString } from "./types";
 
 export function formatReviewComment(reviewResult: string): string {
@@ -53,6 +55,11 @@ async function run() {
     }
     const prId = parseInt(prIdStr, 10);
 
+    // ナレッジディレクトリのパスを解決（タスク入力 → Build.SourcesDirectory/.knowledge）
+    const knowledgeDirInput = tl.getInput("knowledgeDir", false) ?? "";
+    const knowledgeDir =
+      knowledgeDirInput || path.join(tl.getVariable("Build.SourcesDirectory") ?? process.cwd(), ".knowledge");
+
     // 2. Azure DevOps API クライアントの初期化
     const authHandler = azdev.getPersonalAccessTokenHandler(token);
     const connection = new azdev.WebApi(orgUrl, authHandler);
@@ -81,7 +88,36 @@ async function run() {
         ` debug=${connParams.debug ?? "false"}`,
     );
 
-    // 5. 1 ファイルずつ LLM へレビューを依頼し、指摘を個別コメントとして投稿
+    // 5. Step 1: ナレッジファイルのインデックス作成
+    const knowledgeIndex = indexKnowledgeFiles(knowledgeDir);
+    console.log(`ナレッジファイル数: ${knowledgeIndex.length} 件 (ディレクトリ: ${knowledgeDir})`);
+
+    // 6. Step 2 (Pass 1): ナレッジの動的選択（Routing）
+    // 変更ファイルの概要（パスと変更種別のみ）を LLM へ渡す。コード内容は含めない。
+    let knowledgeContext = "";
+    let selectedKnowledgeNames: string[] = [];
+
+    if (knowledgeIndex.length > 0) {
+      const changedFilesSummary = changedFiles.map((f) => `- ${f.path} [${f.changeLabel}]`).join("\n");
+
+      console.log("Pass 1: ナレッジファイルを選択しています...");
+      selectedKnowledgeNames = await selectKnowledgeFiles(connParams, knowledgeIndex, changedFilesSummary);
+
+      // インデックスに存在するファイル名のみに限定して安全性を確保
+      const validFilenames = new Set(knowledgeIndex.map((e) => e.filename));
+      selectedKnowledgeNames = selectedKnowledgeNames.filter((n) => validFilenames.has(n));
+
+      console.log(
+        `選択されたナレッジ (${selectedKnowledgeNames.length} 件): ${selectedKnowledgeNames.join(", ") || "(なし)"}`,
+      );
+
+      // 7. Step 3 (Pass 2 前処理): 選択されたナレッジファイルの内容を読み込む
+      if (selectedKnowledgeNames.length > 0) {
+        knowledgeContext = loadKnowledgeContents(knowledgeDir, selectedKnowledgeNames);
+      }
+    }
+
+    // 8. Step 3 (Pass 2): 各ファイルをレビュー → 指摘を個別コメントとして投稿
     let totalPostedCount = 0;
     const postedComments = new Set<string>(); // 重複投稿防止
 
@@ -102,7 +138,8 @@ async function run() {
       const fileDiffText = `### [${file.changeLabel}] \`${file.path}\`\n` + "```" + ext + "\n" + file.content + "\n```";
 
       console.log(`LLM (${connParams.provider}) にレビューを依頼しています...`);
-      const fileReview = await callLlm(connParams, fileDiffText);
+      // コード内容・プロンプト全文・LLM の生レスポンスはログに出力しない
+      const fileReview = await callLlm(connParams, fileDiffText, knowledgeContext || undefined);
 
       // 統計情報のみをログに出力（コード内容は含めない）
       const issues = splitIntoComments(fileReview);

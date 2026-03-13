@@ -1,4 +1,4 @@
-import { AI_REVIEW_MARKER, MAX_DIFF_CHARS, MAX_FILE_CHARS, SYSTEM_PROMPT } from "../src/constants";
+import { AI_REVIEW_MARKER, MAX_DIFF_CHARS, MAX_FILE_CHARS, MAX_KNOWLEDGE_FILES, ROUTING_SYSTEM_PROMPT, SYSTEM_PROMPT } from "../src/constants";
 
 describe("constants", () => {
   test("AI_REVIEW_MARKER が正しい値", () => {
@@ -71,5 +71,22 @@ describe("constants", () => {
   test("SYSTEM_PROMPT にコードスニペット提示の必須指示が含まれる", () => {
     expect(SYSTEM_PROMPT).toContain("コードスニペット");
     expect(SYSTEM_PROMPT).toContain("必ず提示");
+  });
+
+  test("MAX_KNOWLEDGE_FILES が 5", () => {
+    expect(MAX_KNOWLEDGE_FILES).toBe(5);
+  });
+
+  test("ROUTING_SYSTEM_PROMPT が空でない文字列", () => {
+    expect(typeof ROUTING_SYSTEM_PROMPT).toBe("string");
+    expect(ROUTING_SYSTEM_PROMPT.length).toBeGreaterThan(0);
+  });
+
+  test("ROUTING_SYSTEM_PROMPT に JSON 配列での出力指示が含まれる", () => {
+    expect(ROUTING_SYSTEM_PROMPT).toContain("JSON");
+  });
+
+  test("ROUTING_SYSTEM_PROMPT に最大件数の指示が含まれる", () => {
+    expect(ROUTING_SYSTEM_PROMPT).toContain(`${MAX_KNOWLEDGE_FILES}`);
   });
 });

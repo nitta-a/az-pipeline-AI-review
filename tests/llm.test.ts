@@ -412,6 +412,77 @@ describe("callLlm – foundry", () => {
     expect(result).toBe("");
   });
 
+  test("Responses API: output[1] が type=message のとき output_text の text を返す", async () => {
+    // gpt-5-mini などは output[0] が reasoning, output[1] が message
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        output: [
+          { type: "reasoning", summary: [] },
+          {
+            type: "message",
+            content: [{ type: "output_text", text: "Foundry レビュー結果 (reasoning API)" }],
+          },
+        ],
+      }),
+      headers: new Map(),
+    });
+
+    const result = await callLlm(baseParams, "diff text");
+    expect(result).toBe("Foundry レビュー結果 (reasoning API)");
+  });
+
+  test("Responses API: output[0] が type=message のときも text を返す", async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        output: [
+          {
+            type: "message",
+            content: [{ type: "output_text", text: "直接の message 結果" }],
+          },
+        ],
+      }),
+      headers: new Map(),
+    });
+
+    const result = await callLlm(baseParams, "diff text");
+    expect(result).toBe("直接の message 結果");
+  });
+
+  test("Responses API: output 内に type=message がなければフォールバック再帰探索で text を返す", async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        output: [{ type: "reasoning", summary: [] }],
+        some_nested: { deep: { text: "フォールバックテキスト" } },
+      }),
+      headers: new Map(),
+    });
+
+    const result = await callLlm(baseParams, "diff text");
+    expect(result).toBe("フォールバックテキスト");
+  });
+
+  test("choices も output も text フィールドもない場合は空文字列を返す", async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ output: [{ type: "reasoning" }] }),
+      headers: new Map(),
+    });
+
+    const result = await callLlm(baseParams, "diff text");
+    expect(result).toBe("");
+  });
+
   test("temperature が指定された場合にペイロードに含まれる", async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,

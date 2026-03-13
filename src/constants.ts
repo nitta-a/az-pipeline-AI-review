@@ -7,6 +7,9 @@ export const MAX_DIFF_CHARS = 30000;
 /** 1 ファイルあたりのコンテンツ最大文字数 */
 export const MAX_FILE_CHARS = 5000;
 
+/** ファイルごとの LLM リクエスト間に挿入するスリープ時間（ms）*/
+export const RATE_LIMIT_DELAY_MS = 500;
+
 /** LLM へ渡すシステムプロンプト */
 export const SYSTEM_PROMPT = `あなたはシニアソフトウェアエンジニア兼、厳格なコードレビュアーです。
 提供された Pull Request (PR) の差分データを分析し、以下のガイドラインに従って日本語でレビューを行ってください。

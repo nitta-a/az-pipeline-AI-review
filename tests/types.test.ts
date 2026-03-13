@@ -111,6 +111,23 @@ describe("parseConnectionString", () => {
     expect(result.model).toBe("gpt-4o");
   });
 
+  test("max_tokens と temperature をパースできる", () => {
+    const result = parseConnectionString(
+      "provider=openai;key=sk-test;model=gpt-4o;max_tokens=8192;temperature=0.2",
+    );
+    expect(result.maxTokens).toBe("8192");
+    expect(result.temperature).toBe("0.2");
+    // スネークケースキーはそのままは残らない
+    expect((result as Record<string, unknown>).max_tokens).toBeUndefined();
+  });
+
+  test("debug パラメータをパースできる", () => {
+    const result = parseConnectionString(
+      "provider=openai;key=sk-test;model=gpt-4o;debug=true",
+    );
+    expect(result.debug).toBe("true");
+  });
+
   // ─── 異常系 ───────────────────────────────────────────────
 
   test("provider がない場合はエラーをスロー", () => {

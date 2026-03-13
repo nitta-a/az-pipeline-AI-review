@@ -119,6 +119,26 @@ provider=foundry;target_uri=https://<project>.services.ai.azure.com;key=<api-key
 
 > **Note:** モデル名はエンドポイントのデプロイ名またはモデル識別子を指定してください（例: `gpt-4o`、`Phi-4` など）。
 
+#### 共通オプションパラメータ
+
+すべてのプロバイダーで以下のオプションパラメータを接続文字列に追加できます。
+
+| パラメータ | 説明 | デフォルト |
+|---|---|---|
+| `max_tokens` | LLM の最大出力トークン数 | `4096` |
+| `temperature` | 生成の温度 (0.0〜2.0) | プロバイダーのデフォルト値 |
+| `debug` | `true` にするとテスト用の短いプロンプトを送信 | `false` |
+
+```
+provider=foundry;endpoint=https://...;key=<key>;model=gpt-4o;max_tokens=4096;temperature=0.2
+```
+
+デバッグモード（LLM 接続テスト用）：
+
+```
+provider=foundry;endpoint=https://...;key=<key>;model=gpt-4o;debug=true
+```
+
 > **セキュリティ上の注意：** API キーは直接 YAML に記載せず、Azure DevOps の **Pipeline variables（Secret 設定）** または **Variable Groups** に保存して参照することを推奨します。
 >
 > ```yaml
@@ -159,8 +179,8 @@ jobs:
 
 Azure AI Foundry の Cognitive Services エンドポイント（`cognitiveservices.azure.com`）を使用する場合は、`provider=azure` と正しい `api_version` を指定してください。
 
-> **api_version について：** 新しいモデル（`gpt-4o-mini` など）は古い API バージョン（デフォルトの `2024-02-01`）では利用できないため、モデルに対応したバージョンを明示的に指定する必要があります。
-> 誤ったバージョンを指定すると `404 DeploymentNotFound` や `400 BadRequest` エラーが発生し、LLM への呼び出しが失敗します。
+> **api_version について：** 新しいモデル（`gpt-4o-mini` など）は古い API バージョンでは利用できないため、モデルに対応したバージョンを明示的に指定する必要があります。
+> デフォルトは `2024-10-21` です。`2025-04-01-preview` は preview 版のため、エンドポイントやモデルとの互換性がない場合があります。
 > 使用するモデルがサポートする API バージョンは [Azure OpenAI モデルのドキュメント](https://learn.microsoft.com/azure/ai-services/openai/concepts/models) を参照してください。
 
 ```yaml
@@ -172,7 +192,7 @@ Azure AI Foundry の Cognitive Services エンドポイント（`cognitiveservic
             endpoint=$(AOAI_ENDPOINT);
             key=$(AOAI_KEY);
             model=gpt-4o-mini;
-            api_version=2025-04-01-preview
+            api_version=2024-10-21
 ```
 
 または `provider=foundry` で OpenAI 互換エンドポイントを直接指定することもできます：
@@ -183,7 +203,7 @@ Azure AI Foundry の Cognitive Services エンドポイント（`cognitiveservic
         inputs:
           llmConnectionString: >-
             provider=foundry;
-            endpoint=https://<resource>.cognitiveservices.azure.com/openai/deployments/<model>/chat/completions?api-version=2025-04-01-preview;
+            endpoint=https://<resource>.cognitiveservices.azure.com/openai/deployments/<model>/chat/completions?api-version=2024-10-21;
             key=$(AOAI_KEY);
             model=gpt-4o-mini
 ```
@@ -251,12 +271,22 @@ steps:
 
 #### 3. Azure AI Foundry の API バージョンを確認する
 
-`gpt-4o-mini` など新しいモデルを使用する場合は、`api_version=2025-04-01-preview` を指定してください。
-デフォルト値 `2024-02-01` は古いモデル向けであり、新しいモデルで使用すると `404 DeploymentNotFound` エラーが発生して LLM の呼び出しが失敗します。
+`gpt-4o-mini` など新しいモデルを使用する場合は、`api_version=2024-10-21` を指定してください。
+デフォルト値は `2024-10-21` です。`2025-04-01-preview` など preview バージョンはエンドポイントやモデルとの互換性がない場合があります。
 
 ```
-provider=azure;endpoint=$(AOAI_ENDPOINT);key=$(AOAI_KEY);model=gpt-4o-mini;api_version=2025-04-01-preview
+provider=azure;endpoint=$(AOAI_ENDPOINT);key=$(AOAI_KEY);model=gpt-4o-mini;api_version=2024-10-21
 ```
+
+#### 5. デバッグモードで LLM 接続をテストする
+
+LLM からのレスポンスが空になる場合、接続文字列に `debug=true` を追加することで、短いテスト用プロンプト（「Hello とだけ返してください」）を送信して接続を確認できます。
+
+```
+provider=foundry;endpoint=https://...;key=<key>;model=gpt-4o;debug=true
+```
+
+パイプラインのログで `##[group]🤖 LLM レスポンス (生)` セクションに「Hello」などの応答が表示されれば、LLM への接続は正常です。
 
 #### 4. Build Service の権限を確認する
 

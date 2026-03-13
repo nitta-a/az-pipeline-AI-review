@@ -4,18 +4,52 @@ import OpenAi, { AzureOpenAI } from "openai";
 import { SYSTEM_PROMPT } from "./constants";
 import type { ConnectionParams } from "./types";
 
+/** 接続文字列の maxTokens を数値に変換する（デフォルト: 4096） */
+function resolveMaxTokens(params: ConnectionParams): number {
+  if (params.maxTokens) {
+    const n = Number(params.maxTokens);
+    if (!Number.isNaN(n) && n > 0) {
+      return n;
+    }
+  }
+  return 4096;
+}
+
+/** 接続文字列の temperature を数値に変換する（デフォルト: undefined＝プロバイダー任せ） */
+function resolveTemperature(params: ConnectionParams): number | undefined {
+  if (params.temperature) {
+    const n = Number(params.temperature);
+    if (!Number.isNaN(n)) {
+      return n;
+    }
+  }
+  return undefined;
+}
+
 /**
  * 指定されたプロバイダーの LLM へ差分テキストを送信し、
  * レビュー結果の文字列を返す
  */
 export async function callLlm(params: ConnectionParams, diffText: string): Promise<string> {
-  const userMessage = `以下の PR の変更内容をレビューしてください:\n\n${diffText}`;
+  const isDebug = params.debug === "true";
+
+  const systemPrompt = isDebug ? "あなたはテスト用のアシスタントです。" : SYSTEM_PROMPT;
+  const userMessage = isDebug
+    ? "Hello とだけ返してください。"
+    : `以下の PR の変更内容をレビューしてください:\n\n${diffText}`;
+
+  if (isDebug) {
+    console.log("⚠️ デバッグモード: テスト用の短いプロンプトを送信します。");
+  }
 
   // デバッグ: LLM に送信するプロンプト全文をログに出力
   console.log("##[group]📤 LLM 送信プロンプト");
-  console.log(`[System]\n${SYSTEM_PROMPT}`);
+  console.log(`[System]\n${systemPrompt}`);
   console.log(`[User]\n${userMessage}`);
   console.log("##[endgroup]");
+
+  const maxTokens = resolveMaxTokens(params);
+  const temperature = resolveTemperature(params);
 
   switch (params.provider) {
     case "azure": {
@@ -25,16 +59,22 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
       const client = new AzureOpenAI({
         endpoint: params.endpoint,
         apiKey: params.key,
-        apiVersion: params.apiVersion ?? "2024-02-01",
+        apiVersion: params.apiVersion ?? "2024-10-21",
         deployment: params.model,
       });
-      const res = await client.chat.completions.create({
+      const chatParams: Record<string, unknown> = {
         model: params.model,
+        // biome-ignore lint/style/useNamingConvention: OpenAI SDK requires snake_case
+        max_tokens: maxTokens,
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: systemPrompt },
           { role: "user", content: userMessage },
         ],
-      });
+      };
+      if (temperature !== undefined) {
+        chatParams.temperature = temperature;
+      }
+      const res = await client.chat.completions.create(chatParams as any);
       return res.choices[0]?.message?.content ?? "";
     }
 
@@ -43,13 +83,19 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
         throw new Error("OpenAI には key が必要です。");
       }
       const client = new OpenAi({ apiKey: params.key });
-      const res = await client.chat.completions.create({
+      const chatParams: Record<string, unknown> = {
         model: params.model,
+        // biome-ignore lint/style/useNamingConvention: OpenAI SDK requires snake_case
+        max_tokens: maxTokens,
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: "system", content: systemPrompt },
           { role: "user", content: userMessage },
         ],
-      });
+      };
+      if (temperature !== undefined) {
+        chatParams.temperature = temperature;
+      }
+      const res = await client.chat.completions.create(chatParams as any);
       return res.choices[0]?.message?.content ?? "";
     }
 
@@ -58,13 +104,17 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
         throw new Error("Anthropic には key が必要です。");
       }
       const client = new Anthropic({ apiKey: params.key });
-      const res = await client.messages.create({
+      const anthropicParams: Record<string, unknown> = {
         model: params.model,
         // biome-ignore lint/style/useNamingConvention: Anthropic SDK requires snake_case
-        max_tokens: 4096,
-        system: SYSTEM_PROMPT,
+        max_tokens: maxTokens,
+        system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
-      });
+      };
+      if (temperature !== undefined) {
+        anthropicParams.temperature = temperature;
+      }
+      const res = await client.messages.create(anthropicParams as any);
       const block = res.content[0];
       return block?.type === "text" ? block.text : "";
     }
@@ -80,14 +130,18 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
           secretAccessKey: params.secretKey,
         },
       });
-      const body = JSON.stringify({
+      const bedrockBody: Record<string, unknown> = {
         // biome-ignore lint/style/useNamingConvention: Bedrock API requires snake_case
         anthropic_version: "bedrock-2023-05-31",
         // biome-ignore lint/style/useNamingConvention: Bedrock API requires snake_case
-        max_tokens: 4096,
-        system: SYSTEM_PROMPT,
+        max_tokens: maxTokens,
+        system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
-      });
+      };
+      if (temperature !== undefined) {
+        bedrockBody.temperature = temperature;
+      }
+      const body = JSON.stringify(bedrockBody);
       const command = new InvokeModelCommand({
         modelId: params.model,
         contentType: "application/json",
@@ -121,19 +175,29 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
       }
 
       const messages = [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: systemPrompt },
         { role: "user", content: userMessage },
       ];
 
       // Responses API (used by newer Foundry/Cognitive Services endpoints) expects the input
       // in an `input` field instead of `messages`.
       const isResponsesApi = /\/responses\b/i.test(url);
-      const payload: Record<string, unknown> = { model: params.model };
+      const payload: Record<string, unknown> = {
+        model: params.model,
+        // biome-ignore lint/style/useNamingConvention: OpenAI-compatible API requires snake_case
+        max_tokens: maxTokens,
+      };
+      if (temperature !== undefined) {
+        payload.temperature = temperature;
+      }
       if (isResponsesApi) {
         payload.input = messages;
       } else {
         payload.messages = messages;
       }
+
+      console.log(`Foundry リクエスト URL: ${url}`);
+      console.log(`Foundry ペイロード (max_tokens=${maxTokens}, temperature=${temperature ?? "default"})`);
 
       const res = await fetch(url, {
         method: "POST",
@@ -143,15 +207,27 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
         },
         body: JSON.stringify(payload),
       });
+
+      // 詳細なレスポンス情報をログ出力
+      console.log(`Foundry HTTP ステータス: ${res.status} ${res.statusText}`);
+      const errorCode = res.headers.get("x-ms-error-code");
+      if (errorCode) {
+        console.log(`Foundry x-ms-error-code: ${errorCode}`);
+      }
+
       if (!res.ok) {
         const txt = await res.text();
         throw new Error(`Foundry request failed: ${res.status} ${txt}`);
       }
       const j = (await res.json()) as any;
-      // OpenAI-compatible responses usually provide choices[0].message.content
-      // Fallbacks attempt common alternative shapes.
+
+      // レスポンスボディが空や想定外の形状の場合に診断ログを出力
       const content =
         j?.choices?.[0]?.message?.content ?? j?.choices?.[0]?.text ?? j?.outputs?.[0]?.content?.[0]?.text ?? "";
+      if (!content) {
+        console.log("##[warning]Foundry レスポンスのコンテンツが空です。レスポンスボディ全体:");
+        console.log(JSON.stringify(j, null, 2));
+      }
       return content;
     }
 

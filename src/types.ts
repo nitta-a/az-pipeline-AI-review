@@ -14,6 +14,12 @@ export interface ConnectionParams {
   accessKey?: string;
   /** AWS シークレットキー */
   secretKey?: string;
+  /** LLM の最大トークン数 */
+  maxTokens?: string;
+  /** LLM の温度パラメータ (0.0〜2.0) */
+  temperature?: string;
+  /** デバッグモード ("true" で簡易テストプロンプトを送信) */
+  debug?: string;
   [key: string]: string | undefined;
 }
 
@@ -29,6 +35,7 @@ const KEY_MAP: Record<string, string> = {
   ["target"]: "endpoint",
   ["target_uri"]: "endpoint",
   ["targeturi"]: "endpoint",
+  ["max_tokens"]: "maxTokens",
 };
 
 export function parseConnectionString(raw: string): ConnectionParams {

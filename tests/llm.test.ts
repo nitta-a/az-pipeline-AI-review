@@ -59,7 +59,7 @@ describe("callLlm – azure", () => {
     endpoint: "https://example.openai.azure.com",
     key: "azure-key",
     model: "gpt-4o",
-    apiVersion: "2024-02-01",
+    apiVersion: "2024-10-21",
   };
 
   test("LLM の回答文字列を返す", async () => {
@@ -189,7 +189,10 @@ describe("callLlm – foundry", () => {
   test("デフォルトエンドポイントには /v1/chat/completions を付与", async () => {
     const mockResponse = {
       ok: true,
+      status: 200,
+      statusText: "OK",
       json: async () => ({ choices: [{ message: { content: "Foundry result" } }] }),
+      headers: new Map(),
     };
     (global as any).fetch.mockResolvedValue(mockResponse);
 
@@ -205,7 +208,10 @@ describe("callLlm – foundry", () => {
     const params = { ...baseParams, endpoint: "https://example.com/openai/responses?api-version=2025-04-01-preview" };
     const mockResponse = {
       ok: true,
+      status: 200,
+      statusText: "OK",
       json: async () => ({ choices: [{ message: { content: "OK" } }] }),
+      headers: new Map(),
     };
     (global as any).fetch.mockResolvedValue(mockResponse);
 
@@ -221,7 +227,10 @@ describe("callLlm – foundry", () => {
     const params = { ...baseParams, endpoint: "https://example.com/openai/responses?api-version=2025-04-01-preview" };
     const mockResponse = {
       ok: true,
+      status: 200,
+      statusText: "OK",
       json: async () => ({ choices: [] }),
+      headers: new Map(),
     };
     (global as any).fetch.mockResolvedValue(mockResponse);
 
@@ -318,7 +327,10 @@ describe("callLlm – foundry", () => {
   test("LLM の回答文字列を返す (choices[0].message.content)", async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
+      status: 200,
+      statusText: "OK",
       json: async () => ({ choices: [{ message: { content: "Foundry レビュー結果" } }] }),
+      headers: new Map(),
     });
 
     const result = await callLlm(baseParams, "diff text");
@@ -328,7 +340,10 @@ describe("callLlm – foundry", () => {
   test("fetch に正しい URL と Authorization ヘッダーが渡される", async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
+      status: 200,
+      statusText: "OK",
       json: async () => ({ choices: [{ message: { content: "ok" } }] }),
+      headers: new Map(),
     });
 
     await callLlm(baseParams, "diff");
@@ -347,7 +362,10 @@ describe("callLlm – foundry", () => {
   test("末尾スラッシュ付き endpoint でも /v1/chat/completions が正しく組み立てられる", async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
+      status: 200,
+      statusText: "OK",
       json: async () => ({ choices: [{ message: { content: "ok" } }] }),
+      headers: new Map(),
     });
 
     const params = { ...baseParams, endpoint: "https://my-project.services.ai.azure.com/" };
@@ -363,7 +381,9 @@ describe("callLlm – foundry", () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: false,
       status: 401,
+      statusText: "Unauthorized",
       text: async () => "Unauthorized",
+      headers: new Map(),
     });
 
     await expect(callLlm(baseParams, "diff")).rejects.toThrow("401");
@@ -382,11 +402,124 @@ describe("callLlm – foundry", () => {
   test("choices が空の場合は空文字列を返す", async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
+      status: 200,
+      statusText: "OK",
       json: async () => ({ choices: [] }),
+      headers: new Map(),
     });
 
     const result = await callLlm(baseParams, "diff");
     expect(result).toBe("");
+  });
+
+  test("max_tokens がペイロードに含まれる", async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ choices: [{ message: { content: "ok" } }] }),
+      headers: new Map(),
+    });
+
+    await callLlm(baseParams, "diff");
+
+    const callArgs = (global.fetch as jest.Mock).mock.calls[0];
+    const sentBody = JSON.parse(callArgs[1].body);
+    expect(sentBody.max_tokens).toBe(4096);
+  });
+
+  test("接続文字列の maxTokens が反映される", async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ choices: [{ message: { content: "ok" } }] }),
+      headers: new Map(),
+    });
+
+    const params = { ...baseParams, maxTokens: "8192" };
+    await callLlm(params, "diff");
+
+    const callArgs = (global.fetch as jest.Mock).mock.calls[0];
+    const sentBody = JSON.parse(callArgs[1].body);
+    expect(sentBody.max_tokens).toBe(8192);
+  });
+
+  test("temperature が指定された場合にペイロードに含まれる", async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ choices: [{ message: { content: "ok" } }] }),
+      headers: new Map(),
+    });
+
+    const params = { ...baseParams, temperature: "0.2" };
+    await callLlm(params, "diff");
+
+    const callArgs = (global.fetch as jest.Mock).mock.calls[0];
+    const sentBody = JSON.parse(callArgs[1].body);
+    expect(sentBody.temperature).toBe(0.2);
+  });
+});
+
+// ─── デバッグモード ─────────────────────────────────────────────────────────────
+describe("callLlm – debug mode", () => {
+  beforeEach(() => {
+    global.fetch = jest.fn();
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test("debug=true のときテスト用の短いプロンプトを送信", async () => {
+    const params: ConnectionParams = {
+      provider: "foundry",
+      endpoint: "https://example.com",
+      key: "foundry-key",
+      model: "gpt-4o",
+      debug: "true",
+    };
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ choices: [{ message: { content: "Hello" } }] }),
+      headers: new Map(),
+    });
+
+    const result = await callLlm(params, "long diff text...");
+    expect(result).toBe("Hello");
+
+    const callArgs = (global.fetch as jest.Mock).mock.calls[0];
+    const sentBody = JSON.parse(callArgs[1].body);
+    // デバッグモードではユーザーメッセージにdiffが含まれない
+    const userMsg = sentBody.messages.find((m: any) => m.role === "user");
+    expect(userMsg.content).toBe("Hello とだけ返してください。");
+    expect(userMsg.content).not.toContain("long diff text");
+  });
+
+  test("debug=true のとき OpenAI でもテスト用プロンプトを送信", async () => {
+    const params: ConnectionParams = {
+      provider: "openai",
+      key: "sk-test",
+      model: "gpt-4o",
+      debug: "true",
+    };
+    getOpenAiCreate().mockResolvedValue({
+      choices: [{ message: { content: "Hello" } }],
+    });
+
+    const result = await callLlm(params, "long diff");
+    expect(result).toBe("Hello");
+    expect(getOpenAiCreate()).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          expect.objectContaining({ role: "user", content: "Hello とだけ返してください。" }),
+        ]),
+      }),
+    );
   });
 });
 

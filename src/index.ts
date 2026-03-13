@@ -54,7 +54,11 @@ async function run() {
     // 5. LLM へレビューを依頼
     console.log(`LLM (${connParams.provider}) にレビューを依頼しています...`);
     console.log(
-      `接続パラメータ: provider=${connParams.provider}, model=${connParams.model}, apiVersion=${connParams.apiVersion ?? "(default)"}, maxTokens=${connParams.maxTokens ?? "(default:4096)"}, temperature=${connParams.temperature ?? "(default)"}, debug=${connParams.debug ?? "false"}`,
+      `接続パラメータ: provider=${connParams.provider}, model=${connParams.model},` +
+        ` apiVersion=${connParams.apiVersion ?? "(default)"},` +
+        ` maxTokens=${connParams.maxTokens ?? "(default:4096)"},` +
+        ` temperature=${connParams.temperature ?? "(default)"},` +
+        ` debug=${connParams.debug ?? "false"}`,
     );
     const reviewResult = await callLlm(connParams, diffText);
 

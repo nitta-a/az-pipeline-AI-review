@@ -62,19 +62,16 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
         apiVersion: params.apiVersion ?? "2024-10-21",
         deployment: params.model,
       });
-      const chatParams: Record<string, unknown> = {
+      const res = await client.chat.completions.create({
         model: params.model,
         // biome-ignore lint/style/useNamingConvention: OpenAI SDK requires snake_case
         max_tokens: maxTokens,
+        ...(temperature !== undefined && { temperature }),
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userMessage },
         ],
-      };
-      if (temperature !== undefined) {
-        chatParams.temperature = temperature;
-      }
-      const res = await client.chat.completions.create(chatParams as any);
+      });
       return res.choices[0]?.message?.content ?? "";
     }
 
@@ -83,19 +80,16 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
         throw new Error("OpenAI には key が必要です。");
       }
       const client = new OpenAi({ apiKey: params.key });
-      const chatParams: Record<string, unknown> = {
+      const res = await client.chat.completions.create({
         model: params.model,
         // biome-ignore lint/style/useNamingConvention: OpenAI SDK requires snake_case
         max_tokens: maxTokens,
+        ...(temperature !== undefined && { temperature }),
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userMessage },
         ],
-      };
-      if (temperature !== undefined) {
-        chatParams.temperature = temperature;
-      }
-      const res = await client.chat.completions.create(chatParams as any);
+      });
       return res.choices[0]?.message?.content ?? "";
     }
 
@@ -104,17 +98,14 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
         throw new Error("Anthropic には key が必要です。");
       }
       const client = new Anthropic({ apiKey: params.key });
-      const anthropicParams: Record<string, unknown> = {
+      const res = await client.messages.create({
         model: params.model,
         // biome-ignore lint/style/useNamingConvention: Anthropic SDK requires snake_case
         max_tokens: maxTokens,
+        ...(temperature !== undefined && { temperature }),
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
-      };
-      if (temperature !== undefined) {
-        anthropicParams.temperature = temperature;
-      }
-      const res = await client.messages.create(anthropicParams as any);
+      });
       const block = res.content[0];
       return block?.type === "text" ? block.text : "";
     }
@@ -130,18 +121,15 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
           secretAccessKey: params.secretKey,
         },
       });
-      const bedrockBody: Record<string, unknown> = {
+      const body = JSON.stringify({
         // biome-ignore lint/style/useNamingConvention: Bedrock API requires snake_case
         anthropic_version: "bedrock-2023-05-31",
         // biome-ignore lint/style/useNamingConvention: Bedrock API requires snake_case
         max_tokens: maxTokens,
+        ...(temperature !== undefined && { temperature }),
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
-      };
-      if (temperature !== undefined) {
-        bedrockBody.temperature = temperature;
-      }
-      const body = JSON.stringify(bedrockBody);
+      });
       const command = new InvokeModelCommand({
         modelId: params.model,
         contentType: "application/json",
@@ -186,10 +174,8 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
         model: params.model,
         // biome-ignore lint/style/useNamingConvention: OpenAI-compatible API requires snake_case
         max_tokens: maxTokens,
+        ...(temperature !== undefined && { temperature }),
       };
-      if (temperature !== undefined) {
-        payload.temperature = temperature;
-      }
       if (isResponsesApi) {
         payload.input = messages;
       } else {

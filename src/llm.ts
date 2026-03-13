@@ -170,6 +170,7 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          // biome-ignore lint/style/useNamingConvention: false positive
           Authorization: `Bearer ${params.key}`,
         },
         body: JSON.stringify(payload),

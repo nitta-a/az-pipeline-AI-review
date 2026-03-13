@@ -86,8 +86,7 @@ async function run() {
       }
 
       const ext = file.path.split(".").pop() ?? "";
-      const fileDiffText =
-        `### [${file.changeLabel}] \`${file.path}\`\n` + "```" + ext + "\n" + file.content + "\n```";
+      const fileDiffText = `### [${file.changeLabel}] \`${file.path}\`\n` + "```" + ext + "\n" + file.content + "\n```";
 
       console.log(`LLM (${connParams.provider}) にレビューを依頼しています...`);
       const fileReview = await callLlm(connParams, fileDiffText);

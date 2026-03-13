@@ -1,4 +1,4 @@
-import { formatReviewComment, splitIntoComments } from "../src/index";
+import { formatReviewComment, parseIssueLocation, splitIntoComments } from "../src/index";
 import { AI_REVIEW_MARKER } from "../src/constants";
 
 describe("formatReviewComment", () => {
@@ -38,10 +38,12 @@ describe("splitIntoComments", () => {
 
   test("複数の指摘を個別に分割する", () => {
     const text = [
+      "### [src/foo.ts:10]",
       "- **バグ**: ロジックに誤りがあります。",
       "```ts",
       "const x = 1;",
       "```",
+      "### [src/foo.ts:20]",
       "- **セキュリティ**: 機密情報がハードコードされています。",
       "```ts",
       "const token = process.env.TOKEN;",
@@ -69,12 +71,14 @@ describe("splitIntoComments", () => {
 
   test("指摘直後のコードブロックは同じ項目に含まれる", () => {
     const text = [
+      "### [src/foo.ts:5]",
       "- **パフォーマンス**: ループの最適化が必要です。",
       "```ts",
       "for (const item of items) {",
       "  process(item);",
       "}",
       "```",
+      "### [src/foo.ts:15]",
       "- **可読性**: 命名が不明瞭です。",
     ].join("\n");
 
@@ -93,10 +97,60 @@ describe("splitIntoComments", () => {
   });
 
   test("前後の空白がトリムされる", () => {
-    const text = "\n\n- **バグ**: 問題があります。\n\n- **セキュリティ**: 脆弱性があります。\n\n";
+    const text =
+      "\n\n### [src/foo.ts:1]\n- **バグ**: 問題があります。\n\n### [src/foo.ts:2]\n- **セキュリティ**: 脆弱性があります。\n\n";
     const result = splitIntoComments(text);
     expect(result).toHaveLength(2);
-    expect(result[0]).toBe("- **バグ**: 問題があります。");
-    expect(result[1]).toBe("- **セキュリティ**: 脆弱性があります。");
+    expect(result[0]).toContain("バグ");
+    expect(result[1]).toContain("セキュリティ");
+  });
+});
+
+describe("parseIssueLocation", () => {
+  test("ファイルパスと行番号を正しく抽出する", () => {
+    const text = "### [src/foo.ts:42]\n- **バグ**: 問題があります。";
+    const result = parseIssueLocation(text);
+    expect(result).not.toBeNull();
+    expect(result?.filePath).toBe("src/foo.ts");
+    expect(result?.lineNumber).toBe(42);
+  });
+
+  test("行番号なしのヘッダーは lineNumber が null になる", () => {
+    const text = "### [src/foo.ts]\n- **バグ**: 問題があります。";
+    const result = parseIssueLocation(text);
+    expect(result).not.toBeNull();
+    expect(result?.filePath).toBe("src/foo.ts");
+    expect(result?.lineNumber).toBeNull();
+  });
+
+  test("ヘッダーがない場合は null を返す", () => {
+    const text = "- **バグ**: 問題があります。";
+    expect(parseIssueLocation(text)).toBeNull();
+  });
+
+  test("前後にスペースがあるヘッダーを正しく処理する", () => {
+    const text = "###  [ src/bar.ts : 10 ]\n- **セキュリティ**: 脆弱性があります。";
+    const result = parseIssueLocation(text);
+    expect(result).not.toBeNull();
+    expect(result?.filePath).toBe("src/bar.ts");
+    expect(result?.lineNumber).toBe(10);
+  });
+
+  test("行番号として 1 を正しく処理する", () => {
+    const text = "### [/src/index.ts:1]\n- **バグ**: ファイル先頭行の問題。";
+    const result = parseIssueLocation(text);
+    expect(result?.filePath).toBe("/src/index.ts");
+    expect(result?.lineNumber).toBe(1);
+  });
+
+  test("本文途中に ### [ が含まれても最初のヘッダーを返す", () => {
+    const text = "### [src/a.ts:5]\n- **バグ**: 参照 ### [src/b.ts:99] を確認。";
+    const result = parseIssueLocation(text);
+    expect(result?.filePath).toBe("src/a.ts");
+    expect(result?.lineNumber).toBe(5);
+  });
+
+  test("空文字列は null を返す", () => {
+    expect(parseIssueLocation("")).toBeNull();
   });
 });

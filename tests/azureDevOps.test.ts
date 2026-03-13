@@ -2,6 +2,7 @@ import { Readable } from "node:stream";
 import { AI_REVIEW_MARKER, MAX_DIFF_CHARS, MAX_FILE_CHARS } from "../src/constants";
 import {
   deleteExistingAiReviewComments,
+  getChangedFiles,
   getPrDiff,
   streamToString,
 } from "../src/azureDevOps";
@@ -327,5 +328,151 @@ describe("deleteExistingAiReviewComments", () => {
 
     await deleteExistingAiReviewComments(gitApi as any, "repo-1", 1);
     expect(deleteComment).not.toHaveBeenCalled();
+  });
+});
+
+// ─── getChangedFiles ──────────────────────────────────────────────────────────
+describe("getChangedFiles", () => {
+  test("変更ファイルの情報を配列として返す", async () => {
+    const gitApi = makeMockGitApi({
+      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/feature/test" }),
+      getPullRequestIterations: jest.fn().mockResolvedValue([{ id: 1 }]),
+      getPullRequestIterationChanges: jest.fn().mockResolvedValue({
+        changeEntries: [
+          { item: { path: "/src/foo.ts" }, changeType: 2 },
+        ],
+      }),
+      getItemContent: jest.fn().mockResolvedValue(makeStream("const x = 1;")),
+    });
+
+    const result = await getChangedFiles(gitApi as any, "repo-1", 42);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].path).toBe("/src/foo.ts");
+    expect(result[0].changeLabel).toBe("編集");
+    expect(result[0].content).toBe("const x = 1;");
+  });
+
+  test("イテレーションが存在しない場合は空配列を返す", async () => {
+    const gitApi = makeMockGitApi({
+      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/main" }),
+      getPullRequestIterations: jest.fn().mockResolvedValue([]),
+    });
+
+    const result = await getChangedFiles(gitApi as any, "repo-1", 1);
+    expect(result).toEqual([]);
+  });
+
+  test("変更ファイルが存在しない場合は空配列を返す", async () => {
+    const gitApi = makeMockGitApi({
+      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/main" }),
+      getPullRequestIterations: jest.fn().mockResolvedValue([{ id: 1 }]),
+      getPullRequestIterationChanges: jest.fn().mockResolvedValue({ changeEntries: [] }),
+    });
+
+    const result = await getChangedFiles(gitApi as any, "repo-1", 1);
+    expect(result).toEqual([]);
+  });
+
+  test("削除ファイル (changeType=4) は content が null", async () => {
+    const getItemContent = jest.fn();
+    const gitApi = makeMockGitApi({
+      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/main" }),
+      getPullRequestIterations: jest.fn().mockResolvedValue([{ id: 1 }]),
+      getPullRequestIterationChanges: jest.fn().mockResolvedValue({
+        changeEntries: [{ item: { path: "/src/old.ts" }, changeType: 4 }],
+      }),
+      getItemContent,
+    });
+
+    const result = await getChangedFiles(gitApi as any, "repo-1", 1);
+    expect(getItemContent).not.toHaveBeenCalled();
+    expect(result).toHaveLength(1);
+    expect(result[0].changeLabel).toBe("削除");
+    expect(result[0].content).toBeNull();
+  });
+
+  test("changeType=1 は changeLabel が「追加」", async () => {
+    const gitApi = makeMockGitApi({
+      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/feature" }),
+      getPullRequestIterations: jest.fn().mockResolvedValue([{ id: 1 }]),
+      getPullRequestIterationChanges: jest.fn().mockResolvedValue({
+        changeEntries: [{ item: { path: "/src/new.ts" }, changeType: 1 }],
+      }),
+      getItemContent: jest.fn().mockResolvedValue(makeStream("export const hello = 'world';")),
+    });
+
+    const result = await getChangedFiles(gitApi as any, "repo-1", 1);
+    expect(result[0].changeLabel).toBe("追加");
+    expect(result[0].content).toBe("export const hello = 'world';");
+  });
+
+  test("MAX_FILE_CHARS を超えるコンテンツは切り詰められる", async () => {
+    const longContent = "x".repeat(MAX_FILE_CHARS + 500);
+    const gitApi = makeMockGitApi({
+      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/main" }),
+      getPullRequestIterations: jest.fn().mockResolvedValue([{ id: 1 }]),
+      getPullRequestIterationChanges: jest.fn().mockResolvedValue({
+        changeEntries: [{ item: { path: "/src/big.ts" }, changeType: 2 }],
+      }),
+      getItemContent: jest.fn().mockResolvedValue(makeStream(longContent)),
+    });
+
+    const result = await getChangedFiles(gitApi as any, "repo-1", 1);
+    expect(result[0].content).toHaveLength(MAX_FILE_CHARS);
+  });
+
+  test("getItemContent が失敗すると content が null になる", async () => {
+    const gitApi = makeMockGitApi({
+      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/main" }),
+      getPullRequestIterations: jest.fn().mockResolvedValue([{ id: 1 }]),
+      getPullRequestIterationChanges: jest.fn().mockResolvedValue({
+        changeEntries: [{ item: { path: "/src/err.ts" }, changeType: 2 }],
+      }),
+      getItemContent: jest.fn().mockRejectedValue(new Error("404 Not Found")),
+    });
+
+    const result = await getChangedFiles(gitApi as any, "repo-1", 1);
+    expect(result[0].content).toBeNull();
+  });
+
+  test("item.path が undefined のエントリはスキップされる", async () => {
+    const gitApi = makeMockGitApi({
+      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/main" }),
+      getPullRequestIterations: jest.fn().mockResolvedValue([{ id: 1 }]),
+      getPullRequestIterationChanges: jest.fn().mockResolvedValue({
+        changeEntries: [
+          { item: { path: undefined }, changeType: 2 },
+          { item: { path: "/src/valid.ts" }, changeType: 2 },
+        ],
+      }),
+      getItemContent: jest.fn().mockResolvedValue(makeStream("code")),
+    });
+
+    const result = await getChangedFiles(gitApi as any, "repo-1", 1);
+    expect(result).toHaveLength(1);
+    expect(result[0].path).toBe("/src/valid.ts");
+  });
+
+  test("複数ファイルをすべて返す", async () => {
+    const gitApi = makeMockGitApi({
+      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/feature" }),
+      getPullRequestIterations: jest.fn().mockResolvedValue([{ id: 2 }]),
+      getPullRequestIterationChanges: jest.fn().mockResolvedValue({
+        changeEntries: [
+          { item: { path: "/src/a.ts" }, changeType: 1 },
+          { item: { path: "/src/b.ts" }, changeType: 2 },
+          { item: { path: "/src/c.ts" }, changeType: 4 },
+        ],
+      }),
+      getItemContent: jest.fn().mockResolvedValue(makeStream("code")),
+    });
+
+    const result = await getChangedFiles(gitApi as any, "repo-1", 1);
+    expect(result).toHaveLength(3);
+    expect(result[0].changeLabel).toBe("追加");
+    expect(result[1].changeLabel).toBe("編集");
+    expect(result[2].changeLabel).toBe("削除");
+    expect(result[2].content).toBeNull();
   });
 });

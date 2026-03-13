@@ -16,15 +16,35 @@ export function formatReviewComment(reviewResult: string): string {
 
 /**
  * LLM レスポンス（Markdown 形式）を指摘1件ごとに分割する。
- * 行頭が `- **` または `## ` で始まる箇所を区切りとして分割する。
+ * 行頭が `### [` または `## ` で始まる箇所を区切りとして分割する。
  */
 export function splitIntoComments(reviewText: string): string[] {
   if (!reviewText.trim()) {
     return [];
   }
-  // `- **` (指摘箇所) または `## ` (セクションヘッダー) で始まる行の直前で分割
-  const items = reviewText.split(/\n(?=- \*\*|## )/);
+  // `### [` (ファイルパス:行番号ヘッダー) または `## ` (セクションヘッダー) で始まる行の直前で分割
+  const items = reviewText.split(/\n(?=### \[|## )/);
   return items.map((item) => item.trim()).filter((item) => item.length > 0);
+}
+
+/**
+ * 指摘テキストから `### [ファイルパス:行番号]` 形式のヘッダーを解析し、
+ * ファイルパスと行番号を返す。
+ * 行番号が含まれない場合は lineNumber を null として返す。
+ * ヘッダーが存在しない場合は null を返す。
+ */
+export function parseIssueLocation(issueText: string): { filePath: string; lineNumber: number | null } | null {
+  // `### [filepath:lineNumber]` 形式（行番号あり）にマッチ
+  const withLine = issueText.match(/^###\s*\[([^\]]+?):\s*(\d+)\s*\]/m);
+  if (withLine) {
+    return { filePath: withLine[1].trim(), lineNumber: Number.parseInt(withLine[2], 10) };
+  }
+  // `### [filepath]` 形式（行番号なし）にマッチ（フォールバック）
+  const withoutLine = issueText.match(/^###\s*\[([^\]]+?)\]/m);
+  if (withoutLine) {
+    return { filePath: withoutLine[1].trim(), lineNumber: null };
+  }
+  return null;
 }
 
 /**
@@ -135,7 +155,13 @@ async function run() {
       }
 
       const ext = file.path.split(".").pop() ?? "";
-      const fileDiffText = `### [${file.changeLabel}] \`${file.path}\`\n` + "```" + ext + "\n" + file.content + "\n```";
+      // 各行に行番号を付与して LLM が正確な行番号を特定できるようにする
+      const contentWithLineNumbers = file.content
+        .split("\n")
+        .map((line, i) => `${String(i + 1).padStart(5, " ")} | ${line}`)
+        .join("\n");
+      const fileDiffText =
+        `### [${file.changeLabel}] \`${file.path}\`\n` + "```" + ext + "\n" + contentWithLineNumbers + "\n```";
 
       console.log(`LLM (${connParams.provider}) にレビューを依頼しています...`);
       // コード内容・プロンプト全文・LLM の生レスポンスはログに出力しない
@@ -156,6 +182,18 @@ async function run() {
         }
         postedComments.add(commentBody);
 
+        // 指摘テキストから行番号を解析してインラインコメントのコンテキストを構築する
+        const location = parseIssueLocation(issue);
+        const lineNumber = location?.lineNumber ?? null;
+        const threadContext =
+          lineNumber !== null
+            ? {
+                filePath: file.path,
+                rightFileStart: { line: lineNumber, offset: 1 },
+                rightFileEnd: { line: lineNumber, offset: 1 },
+              }
+            : undefined;
+
         try {
           await gitApi.createThread(
             {
@@ -166,11 +204,15 @@ async function run() {
                 },
               ],
               status: 1, // Active
+              ...(threadContext && { threadContext }),
             },
             repoId,
             prId,
           );
           totalPostedCount++;
+          // セキュリティのため、コード内容は出力せず投稿先の情報のみをログに出力する
+          const locationStr = lineNumber !== null ? `${file.path}:${lineNumber}` : `${file.path} (ファイル全体)`;
+          console.log(`コメントを投稿しました: ${locationStr}`);
         } catch (postErr: unknown) {
           console.log(
             `コメントの投稿に失敗しました (${file.path}): ${postErr instanceof Error ? postErr.message : String(postErr)}`,

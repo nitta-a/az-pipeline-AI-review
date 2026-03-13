@@ -26,6 +26,14 @@
       "defaultValue": "",
       "required": true,
       "helpMarkDown": "LLM プロバイダーへの接続文字列。セミコロン区切りの key=value 形式で指定します。\n\nAzure OpenAI: provider=azure;endpoint=https://<resource>.openai.azure.com;key=<api-key>;model=gpt-4o;api_version=2024-02-01\n\nOpenAI: provider=openai;key=sk-<api-key>;model=gpt-4o\n\nAnthropic Claude: provider=anthropic;key=sk-ant-<api-key>;model=claude-3-5-sonnet-20241022\n\nAWS Bedrock: provider=bedrock;region=us-east-1;access_key=<access-key>;secret_key=<secret-key>;model=anthropic.claude-3-5-sonnet-20241022-v2:0\n\nAzure AI Foundry: provider=foundry;endpoint=https://<project>.services.ai.azure.com;key=<api-key>;model=<model-name>"
+    },
+    {
+      "name": "knowledgeDir",
+      "type": "string",
+      "label": "Knowledge Directory",
+      "defaultValue": "$(Build.SourcesDirectory)/.knowledge",
+      "required": false,
+      "helpMarkDown": "プロダクト固有のレビュールール（Markdown ファイル）が格納された .knowledge ディレクトリへのパス。Frontmatter の tags に基づき LLM が動的にファイルを選択します。省略した場合はリポジトリルートの .knowledge ディレクトリを使用します。"
     }
   ],
   "execution": {

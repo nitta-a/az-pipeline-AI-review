@@ -1,4 +1,5 @@
-import { callLlm } from "../src/llm";
+import { callLlm, selectKnowledgeFiles } from "../src/llm";
+import type { KnowledgeEntry } from "../src/knowledge";
 import type { ConnectionParams } from "../src/types";
 
 // ─── LLM SDK をモック ──────────────────────────────────────────────────────────
@@ -576,5 +577,92 @@ describe("callLlm – 未対応プロバイダー", () => {
   test("エラーメッセージに foundry が候補として含まれる", async () => {
     const params: ConnectionParams = { provider: "unknown", model: "some-model" };
     await expect(callLlm(params, "diff")).rejects.toThrow("foundry");
+  });
+});
+
+// ─── selectKnowledgeFiles ─────────────────────────────────────────────────────
+describe("selectKnowledgeFiles", () => {
+  const azureParams: ConnectionParams = {
+    provider: "azure",
+    endpoint: "https://example.openai.azure.com",
+    key: "azure-key",
+    model: "gpt-4o",
+    apiVersion: "2024-10-21",
+  };
+
+  const sampleIndex: KnowledgeEntry[] = [
+    { filename: "security.md", tags: ["security", "auth"] },
+    { filename: "react.md", tags: ["react", "typescript"] },
+    { filename: "api.md", tags: ["api", "rest"] },
+  ];
+
+  beforeEach(() => {
+    getOpenAiCreate().mockReset();
+  });
+
+  test("ナレッジインデックスが空の場合は LLM を呼ばず空配列を返す", async () => {
+    const result = await selectKnowledgeFiles(azureParams, [], "- /src/foo.ts [編集]");
+    expect(result).toEqual([]);
+    expect(getOpenAiCreate()).not.toHaveBeenCalled();
+  });
+
+  test("JSON 配列のファイル名を返す", async () => {
+    getOpenAiCreate().mockResolvedValue({
+      choices: [{ message: { content: '["security.md", "react.md"]' } }],
+    });
+    const result = await selectKnowledgeFiles(azureParams, sampleIndex, "- /src/auth.tsx [追加]");
+    expect(result).toEqual(["security.md", "react.md"]);
+  });
+
+  test("空 JSON 配列は空配列を返す", async () => {
+    getOpenAiCreate().mockResolvedValue({
+      choices: [{ message: { content: "[]" } }],
+    });
+    const result = await selectKnowledgeFiles(azureParams, sampleIndex, "- /src/foo.ts [編集]");
+    expect(result).toEqual([]);
+  });
+
+  test("前後に説明文がある場合も JSON を抽出する", async () => {
+    getOpenAiCreate().mockResolvedValue({
+      choices: [{ message: { content: 'Here are the relevant files: ["api.md"]\nThose match best.' } }],
+    });
+    const result = await selectKnowledgeFiles(azureParams, sampleIndex, "- /src/routes.ts [編集]");
+    expect(result).toEqual(["api.md"]);
+  });
+
+  test("コードブロック記法で囲まれた JSON を解析できる", async () => {
+    getOpenAiCreate().mockResolvedValue({
+      choices: [{ message: { content: '```json\n["security.md"]\n```' } }],
+    });
+    const result = await selectKnowledgeFiles(azureParams, sampleIndex, "- /src/login.ts [追加]");
+    expect(result).toEqual(["security.md"]);
+  });
+
+  test("無効な JSON が返った場合は空配列を返す", async () => {
+    getOpenAiCreate().mockResolvedValue({
+      choices: [{ message: { content: "I cannot determine the relevant files." } }],
+    });
+    const result = await selectKnowledgeFiles(azureParams, sampleIndex, "- /src/foo.ts [編集]");
+    expect(result).toEqual([]);
+  });
+
+  test("ルーティングプロンプトをシステムメッセージとして送信する", async () => {
+    getOpenAiCreate().mockResolvedValue({
+      choices: [{ message: { content: '["react.md"]' } }],
+    });
+    await selectKnowledgeFiles(azureParams, sampleIndex, "- /src/Button.tsx [追加]");
+    expect(getOpenAiCreate()).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          expect.objectContaining({ role: "system" }),
+          expect.objectContaining({ role: "user" }),
+        ]),
+      }),
+    );
+  });
+
+  test("未対応プロバイダーはエラーをスロー", async () => {
+    const params: ConnectionParams = { provider: "unknown", model: "model" };
+    await expect(selectKnowledgeFiles(params, sampleIndex, "")).rejects.toThrow("未対応のプロバイダーです");
   });
 });

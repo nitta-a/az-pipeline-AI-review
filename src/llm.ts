@@ -4,6 +4,30 @@ import OpenAi, { AzureOpenAI } from "openai";
 import { SYSTEM_PROMPT } from "./constants";
 import type { ConnectionParams } from "./types";
 
+/**
+ * JSON オブジェクトを深さ優先で探索し、最初に見つかった非空の `text` 文字列を返す。
+ * Responses API など階層が深い/不定なレスポンスへのフォールバック用。
+ */
+function findFirstTextField(obj: unknown): string | undefined {
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      const found = findFirstTextField(item);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  if (obj !== null && typeof obj === "object") {
+    const record = obj as Record<string, unknown>;
+    if (typeof record.text === "string" && record.text) return record.text;
+    for (const key of Object.keys(record)) {
+      if (key === "text") continue;
+      const found = findFirstTextField(record[key]);
+      if (found) return found;
+    }
+  }
+  return undefined;
+}
+
 /** 接続文字列の temperature を数値に変換する（デフォルト: undefined＝プロバイダー任せ） */
 function resolveTemperature(params: ConnectionParams): number | undefined {
   if (params.temperature) {
@@ -189,9 +213,39 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
       }
       const j = (await res.json()) as any;
 
-      // レスポンスボディが空や想定外の形状の場合に診断ログを出力
-      const content =
-        j?.choices?.[0]?.message?.content ?? j?.choices?.[0]?.text ?? j?.outputs?.[0]?.content?.[0]?.text ?? "";
+      // 1. OpenAI-compatible: choices[0].message.content
+      let content: string = j?.choices?.[0]?.message?.content ?? j?.choices?.[0]?.text ?? "";
+
+      // 2. Responses API: output 配列を走査し type=message かつ content 内に
+      //    type=output_text を持つ要素から text を抽出する。
+      //    gpt-5-mini などは output[0] が type=reasoning のため 0 番目ではなく
+      //    配列全体をスキャンする必要がある。
+      if (!content && Array.isArray(j?.output)) {
+        console.log(`Foundry output 配列の要素数: ${j.output.length}`);
+        for (const item of j.output) {
+          console.log(`  output item type: ${item?.type}`);
+          if (item?.type === "message" && Array.isArray(item?.content)) {
+            for (const block of item.content) {
+              console.log(`    content block type: ${block?.type}`);
+              if (block?.type === "output_text" && block?.text) {
+                content = block.text;
+                break;
+              }
+            }
+          }
+          if (content) break;
+        }
+      }
+
+      // 3. フォールバック: JSON 全体から text フィールドを再帰的に探す
+      if (!content) {
+        const fallback = findFirstTextField(j);
+        if (fallback) {
+          console.log("##[warning]Foundry: 想定パスでテキストが見つからなかったため、再帰探索で取得しました。");
+          content = fallback;
+        }
+      }
+
       if (!content) {
         console.log("##[warning]Foundry レスポンスのコンテンツが空です。レスポンスボディ全体:");
         console.log(JSON.stringify(j, null, 2));

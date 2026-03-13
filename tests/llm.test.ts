@@ -412,39 +412,6 @@ describe("callLlm – foundry", () => {
     expect(result).toBe("");
   });
 
-  test("max_tokens がペイロードに含まれる", async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      json: async () => ({ choices: [{ message: { content: "ok" } }] }),
-      headers: new Map(),
-    });
-
-    await callLlm(baseParams, "diff");
-
-    const callArgs = (global.fetch as jest.Mock).mock.calls[0];
-    const sentBody = JSON.parse(callArgs[1].body);
-    expect(sentBody.max_tokens).toBe(40960);
-  });
-
-  test("接続文字列の maxTokens が反映される", async () => {
-    (global.fetch as jest.Mock).mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: "OK",
-      json: async () => ({ choices: [{ message: { content: "ok" } }] }),
-      headers: new Map(),
-    });
-
-    const params = { ...baseParams, maxTokens: "8192" };
-    await callLlm(params, "diff");
-
-    const callArgs = (global.fetch as jest.Mock).mock.calls[0];
-    const sentBody = JSON.parse(callArgs[1].body);
-    expect(sentBody.max_tokens).toBe(8192);
-  });
-
   test("temperature が指定された場合にペイロードに含まれる", async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,

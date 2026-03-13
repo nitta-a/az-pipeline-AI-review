@@ -12,17 +12,25 @@ function findFirstTextField(obj: unknown): string | undefined {
   if (Array.isArray(obj)) {
     for (const item of obj) {
       const found = findFirstTextField(item);
-      if (found) return found;
+      if (found) {
+        return found;
+      }
     }
     return undefined;
   }
   if (obj !== null && typeof obj === "object") {
     const record = obj as Record<string, unknown>;
-    if (typeof record.text === "string" && record.text) return record.text;
+    if (typeof record.text === "string" && record.text) {
+      return record.text;
+    }
     for (const key of Object.keys(record)) {
-      if (key === "text") continue;
+      if (key === "text") {
+        continue;
+      }
       const found = findFirstTextField(record[key]);
-      if (found) return found;
+      if (found) {
+        return found;
+      }
     }
   }
   return undefined;
@@ -233,7 +241,9 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
               }
             }
           }
-          if (content) break;
+          if (content) {
+            break;
+          }
         }
       }
 

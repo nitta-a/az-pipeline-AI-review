@@ -13,6 +13,19 @@ export function formatReviewComment(reviewResult: string): string {
 }
 
 /**
+ * LLM レスポンス（Markdown 形式）を指摘1件ごとに分割する。
+ * 行頭が `- **` または `## ` で始まる箇所を区切りとして分割する。
+ */
+export function splitIntoComments(reviewText: string): string[] {
+  if (!reviewText.trim()) {
+    return [];
+  }
+  // `- **` (指摘箇所) または `## ` (セクションヘッダー) で始まる行の直前で分割
+  const items = reviewText.split(/\n(?=- \*\*|## )/);
+  return items.map((item) => item.trim()).filter((item) => item.length > 0);
+}
+
+/**
  * 指定されたミリ秒数だけ非同期に待機する。
  * API レート制限（TPM/RPM）に抵触しないよう、LLM リクエスト間に挿入するために使用する。
  */
@@ -68,8 +81,9 @@ async function run() {
         ` debug=${connParams.debug ?? "false"}`,
     );
 
-    // 5. 1 ファイルずつ LLM へレビューを依頼し、結果を収集
-    const reviewParts: string[] = [];
+    // 5. 1 ファイルずつ LLM へレビューを依頼し、指摘を個別コメントとして投稿
+    let totalPostedCount = 0;
+    const postedComments = new Set<string>(); // 重複投稿防止
 
     for (let i = 0; i < changedFiles.length; i++) {
       const file = changedFiles[i];
@@ -81,7 +95,6 @@ async function run() {
       if (file.content === null) {
         console.log("コンテンツが取得できなかったため LLM へのリクエストをスキップします。");
         console.log("##[endgroup]");
-        reviewParts.push(`### [${file.changeLabel}] \`${file.path}\`\n*(コンテンツを取得できませんでした)*`);
         continue;
       }
 
@@ -91,13 +104,41 @@ async function run() {
       console.log(`LLM (${connParams.provider}) にレビューを依頼しています...`);
       const fileReview = await callLlm(connParams, fileDiffText);
 
-      // デバッグ: このファイルに対する LLM の生レスポンスをログに出力
-      console.log("🤖 LLM レスポンス (生):");
-      console.log(fileReview || "(レスポンスが空です)");
+      // 統計情報のみをログに出力（コード内容は含めない）
+      const issues = splitIntoComments(fileReview);
+      console.log(`LLM から ${issues.length} 件の指摘を受け取りました。`);
       console.log("##[endgroup]");
 
-      if (fileReview.trim()) {
-        reviewParts.push(`### [${file.changeLabel}] \`${file.path}\`\n\n${fileReview.trim()}`);
+      // 指摘1件ごとに個別スレッドとして投稿
+      for (const issue of issues) {
+        const commentBody = formatReviewComment(`### [${file.changeLabel}] \`${file.path}\`\n\n${issue}`);
+
+        // 重複チェック
+        if (postedComments.has(commentBody)) {
+          continue;
+        }
+        postedComments.add(commentBody);
+
+        try {
+          await gitApi.createThread(
+            {
+              comments: [
+                {
+                  content: commentBody,
+                  commentType: 1, // Text
+                },
+              ],
+              status: 1, // Active
+            },
+            repoId,
+            prId,
+          );
+          totalPostedCount++;
+        } catch (postErr: unknown) {
+          console.log(
+            `コメントの投稿に失敗しました (${file.path}): ${postErr instanceof Error ? postErr.message : String(postErr)}`,
+          );
+        }
       }
 
       // レート制限への配慮: 次のリクエストまで待機
@@ -106,31 +147,7 @@ async function run() {
       }
     }
 
-    // 6. 全ファイルのレビュー結果を結合して PR コメントとして投稿
-    const combinedReview = reviewParts.join("\n\n---\n\n");
-    const commentBody = formatReviewComment(combinedReview);
-
-    // デバッグ: PR コメントとして投稿する最終本文をログに出力
-    console.log("##[group]📝 PR コメント投稿内容");
-    console.log(commentBody);
-    console.log("##[endgroup]");
-
-    console.log("PR にコメントスレッドを投稿しています...");
-    await gitApi.createThread(
-      {
-        comments: [
-          {
-            content: commentBody,
-            commentType: 1, // Text
-          },
-        ],
-        status: 1, // Active
-      },
-      repoId,
-      prId,
-    );
-
-    console.log("AI レビューコメントを投稿しました。");
+    console.log(`AI レビューコメントを ${totalPostedCount} 件投稿しました。`);
     tl.setResult(tl.TaskResult.Succeeded, "AI レビューが完了しました。");
   } catch (err: unknown) {
     if (err instanceof Error) {

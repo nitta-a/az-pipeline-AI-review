@@ -4,17 +4,6 @@ import OpenAi, { AzureOpenAI } from "openai";
 import { SYSTEM_PROMPT } from "./constants";
 import type { ConnectionParams } from "./types";
 
-/** 接続文字列の maxTokens を数値に変換する（デフォルト: 40960） */
-function resolveMaxTokens(params: ConnectionParams): number {
-  if (params.maxTokens) {
-    const n = Number(params.maxTokens);
-    if (!Number.isNaN(n) && n > 0) {
-      return n;
-    }
-  }
-  return 40960;
-}
-
 /** 接続文字列の temperature を数値に変換する（デフォルト: undefined＝プロバイダー任せ） */
 function resolveTemperature(params: ConnectionParams): number | undefined {
   if (params.temperature) {
@@ -48,7 +37,7 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
   console.log(`[User]\n${userMessage}`);
   console.log("##[endgroup]");
 
-  const maxTokens = resolveMaxTokens(params);
+  const maxTokens = 40960;
   const temperature = resolveTemperature(params);
 
   switch (params.provider) {
@@ -64,8 +53,6 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
       });
       const res = await client.chat.completions.create({
         model: params.model,
-        // biome-ignore lint/style/useNamingConvention: OpenAI SDK requires snake_case
-        max_tokens: maxTokens,
         ...(temperature !== undefined && { temperature }),
         messages: [
           { role: "system", content: systemPrompt },
@@ -82,8 +69,6 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
       const client = new OpenAi({ apiKey: params.key });
       const res = await client.chat.completions.create({
         model: params.model,
-        // biome-ignore lint/style/useNamingConvention: OpenAI SDK requires snake_case
-        max_tokens: maxTokens,
         ...(temperature !== undefined && { temperature }),
         messages: [
           { role: "system", content: systemPrompt },
@@ -124,8 +109,6 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
       const body = JSON.stringify({
         // biome-ignore lint/style/useNamingConvention: Bedrock API requires snake_case
         anthropic_version: "bedrock-2023-05-31",
-        // biome-ignore lint/style/useNamingConvention: Bedrock API requires snake_case
-        max_tokens: maxTokens,
         ...(temperature !== undefined && { temperature }),
         system: systemPrompt,
         messages: [{ role: "user", content: userMessage }],
@@ -172,8 +155,6 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
       const isResponsesApi = /\/responses\b/i.test(url);
       const payload: Record<string, unknown> = {
         model: params.model,
-        // biome-ignore lint/style/useNamingConvention: OpenAI-compatible API requires snake_case
-        max_tokens: maxTokens,
         ...(temperature !== undefined && { temperature }),
       };
       if (isResponsesApi) {
@@ -183,7 +164,7 @@ export async function callLlm(params: ConnectionParams, diffText: string): Promi
       }
 
       console.log(`Foundry リクエスト URL: ${url}`);
-      console.log(`Foundry ペイロード (max_tokens=${maxTokens}, temperature=${temperature ?? "default"})`);
+      console.log(`Foundry ペイロード (temperature=${temperature ?? "default"})`);
 
       const res = await fetch(url, {
         method: "POST",

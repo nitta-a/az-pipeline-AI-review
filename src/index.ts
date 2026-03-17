@@ -155,13 +155,19 @@ async function run() {
       }
 
       const ext = file.path.split(".").pop() ?? "";
-      // 各行に行番号を付与して LLM が正確な行番号を特定できるようにする
-      const contentWithLineNumbers = file.content
-        .split("\n")
-        .map((line, i) => `${String(i + 1).padStart(5, " ")} | ${line}`)
-        .join("\n");
-      const fileDiffText =
-        `### [${file.changeLabel}] \`${file.path}\`\n` + "```" + ext + "\n" + contentWithLineNumbers + "\n```";
+      // diff が利用可能な場合はそちらを優先（変更行のみ+コンテキスト、行番号・+/-マーカー付き）
+      // diff がない場合は全コンテンツに行番号を付与してフォールバック
+      let fileDiffText: string;
+      if (file.diff) {
+        fileDiffText = `### [${file.changeLabel}] \`${file.path}\`\n` + "```diff\n" + file.diff + "\n```";
+      } else {
+        const contentWithLineNumbers = file.content
+          .split("\n")
+          .map((line, i) => `${String(i + 1).padStart(5, " ")} | ${line}`)
+          .join("\n");
+        fileDiffText =
+          `### [${file.changeLabel}] \`${file.path}\`\n` + "```" + ext + "\n" + contentWithLineNumbers + "\n```";
+      }
 
       console.log(`LLM (${connParams.provider}) にレビューを依頼しています...`);
       // コード内容・プロンプト全文・LLM の生レスポンスはログに出力しない

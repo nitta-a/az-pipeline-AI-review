@@ -1,6 +1,7 @@
 import { Readable } from "node:stream";
 import { AI_REVIEW_MARKER, MAX_DIFF_CHARS, MAX_FILE_CHARS } from "../src/constants";
 import {
+  computeDiffContent,
   deleteExistingAiReviewComments,
   getChangedFiles,
   getPrDiff,
@@ -335,14 +336,19 @@ describe("deleteExistingAiReviewComments", () => {
 describe("getChangedFiles", () => {
   test("変更ファイルの情報を配列として返す", async () => {
     const gitApi = makeMockGitApi({
-      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/feature/test" }),
+      getPullRequest: jest.fn().mockResolvedValue({
+        sourceRefName: "refs/heads/feature/test",
+        targetRefName: "refs/heads/main",
+      }),
       getPullRequestIterations: jest.fn().mockResolvedValue([{ id: 1 }]),
       getPullRequestIterationChanges: jest.fn().mockResolvedValue({
         changeEntries: [
           { item: { path: "/src/foo.ts" }, changeType: 2 },
         ],
       }),
-      getItemContent: jest.fn().mockResolvedValue(makeStream("const x = 1;")),
+      getItemContent: jest.fn()
+        .mockResolvedValueOnce(makeStream("const x = 1;"))  // head (source branch)
+        .mockResolvedValueOnce(makeStream("const x = 0;")),  // base (target branch)
     });
 
     const result = await getChangedFiles(gitApi as any, "repo-1", 42);
@@ -351,11 +357,15 @@ describe("getChangedFiles", () => {
     expect(result[0].path).toBe("/src/foo.ts");
     expect(result[0].changeLabel).toBe("編集");
     expect(result[0].content).toBe("const x = 1;");
+    // diff は変更行を含む（追加行と削除行の両方）
+    expect(result[0].diff).not.toBeNull();
+    expect(result[0].diff).toContain("+    1 | const x = 1;");
+    expect(result[0].diff).toContain("-      | const x = 0;");
   });
 
   test("イテレーションが存在しない場合は空配列を返す", async () => {
     const gitApi = makeMockGitApi({
-      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/main" }),
+      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/main", targetRefName: "refs/heads/main" }),
       getPullRequestIterations: jest.fn().mockResolvedValue([]),
     });
 
@@ -365,7 +375,7 @@ describe("getChangedFiles", () => {
 
   test("変更ファイルが存在しない場合は空配列を返す", async () => {
     const gitApi = makeMockGitApi({
-      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/main" }),
+      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/main", targetRefName: "refs/heads/main" }),
       getPullRequestIterations: jest.fn().mockResolvedValue([{ id: 1 }]),
       getPullRequestIterationChanges: jest.fn().mockResolvedValue({ changeEntries: [] }),
     });
@@ -374,10 +384,10 @@ describe("getChangedFiles", () => {
     expect(result).toEqual([]);
   });
 
-  test("削除ファイル (changeType=4) は content が null", async () => {
+  test("削除ファイル (changeType=4) は content と diff が null", async () => {
     const getItemContent = jest.fn();
     const gitApi = makeMockGitApi({
-      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/main" }),
+      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/main", targetRefName: "refs/heads/main" }),
       getPullRequestIterations: jest.fn().mockResolvedValue([{ id: 1 }]),
       getPullRequestIterationChanges: jest.fn().mockResolvedValue({
         changeEntries: [{ item: { path: "/src/old.ts" }, changeType: 4 }],
@@ -390,11 +400,12 @@ describe("getChangedFiles", () => {
     expect(result).toHaveLength(1);
     expect(result[0].changeLabel).toBe("削除");
     expect(result[0].content).toBeNull();
+    expect(result[0].diff).toBeNull();
   });
 
-  test("changeType=1 は changeLabel が「追加」", async () => {
+  test("changeType=1 は changeLabel が「追加」で diff は全行追加", async () => {
     const gitApi = makeMockGitApi({
-      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/feature" }),
+      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/feature", targetRefName: "refs/heads/main" }),
       getPullRequestIterations: jest.fn().mockResolvedValue([{ id: 1 }]),
       getPullRequestIterationChanges: jest.fn().mockResolvedValue({
         changeEntries: [{ item: { path: "/src/new.ts" }, changeType: 1 }],
@@ -405,12 +416,15 @@ describe("getChangedFiles", () => {
     const result = await getChangedFiles(gitApi as any, "repo-1", 1);
     expect(result[0].changeLabel).toBe("追加");
     expect(result[0].content).toBe("export const hello = 'world';");
+    // 追加ファイルはすべての行が + で始まる
+    expect(result[0].diff).not.toBeNull();
+    expect(result[0].diff?.split("\n").every((line) => line.startsWith("+"))).toBe(true);
   });
 
   test("MAX_FILE_CHARS を超えるコンテンツは切り詰められる", async () => {
     const longContent = "x".repeat(MAX_FILE_CHARS + 500);
     const gitApi = makeMockGitApi({
-      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/main" }),
+      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/main", targetRefName: "refs/heads/main" }),
       getPullRequestIterations: jest.fn().mockResolvedValue([{ id: 1 }]),
       getPullRequestIterationChanges: jest.fn().mockResolvedValue({
         changeEntries: [{ item: { path: "/src/big.ts" }, changeType: 2 }],
@@ -422,9 +436,9 @@ describe("getChangedFiles", () => {
     expect(result[0].content).toHaveLength(MAX_FILE_CHARS);
   });
 
-  test("getItemContent が失敗すると content が null になる", async () => {
+  test("getItemContent が失敗すると content と diff が null になる", async () => {
     const gitApi = makeMockGitApi({
-      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/main" }),
+      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/main", targetRefName: "refs/heads/main" }),
       getPullRequestIterations: jest.fn().mockResolvedValue([{ id: 1 }]),
       getPullRequestIterationChanges: jest.fn().mockResolvedValue({
         changeEntries: [{ item: { path: "/src/err.ts" }, changeType: 2 }],
@@ -434,11 +448,12 @@ describe("getChangedFiles", () => {
 
     const result = await getChangedFiles(gitApi as any, "repo-1", 1);
     expect(result[0].content).toBeNull();
+    expect(result[0].diff).toBeNull();
   });
 
   test("item.path が undefined のエントリはスキップされる", async () => {
     const gitApi = makeMockGitApi({
-      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/main" }),
+      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/main", targetRefName: "refs/heads/main" }),
       getPullRequestIterations: jest.fn().mockResolvedValue([{ id: 1 }]),
       getPullRequestIterationChanges: jest.fn().mockResolvedValue({
         changeEntries: [
@@ -456,7 +471,7 @@ describe("getChangedFiles", () => {
 
   test("複数ファイルをすべて返す", async () => {
     const gitApi = makeMockGitApi({
-      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/feature" }),
+      getPullRequest: jest.fn().mockResolvedValue({ sourceRefName: "refs/heads/feature", targetRefName: "refs/heads/main" }),
       getPullRequestIterations: jest.fn().mockResolvedValue([{ id: 2 }]),
       getPullRequestIterationChanges: jest.fn().mockResolvedValue({
         changeEntries: [
@@ -474,5 +489,151 @@ describe("getChangedFiles", () => {
     expect(result[1].changeLabel).toBe("編集");
     expect(result[2].changeLabel).toBe("削除");
     expect(result[2].content).toBeNull();
+    expect(result[2].diff).toBeNull();
+  });
+
+  test("編集ファイル: ターゲットブランチのコンテンツと比較した diff が生成される", async () => {
+    const gitApi = makeMockGitApi({
+      getPullRequest: jest.fn().mockResolvedValue({
+        sourceRefName: "refs/heads/feature",
+        targetRefName: "refs/heads/main",
+      }),
+      getPullRequestIterations: jest.fn().mockResolvedValue([{ id: 1 }]),
+      getPullRequestIterationChanges: jest.fn().mockResolvedValue({
+        changeEntries: [{ item: { path: "/src/calc.ts" }, changeType: 2 }],
+      }),
+      getItemContent: jest.fn()
+        .mockResolvedValueOnce(makeStream("line1\nline2_new\nline3"))  // head
+        .mockResolvedValueOnce(makeStream("line1\nline2_old\nline3")), // base
+    });
+
+    const result = await getChangedFiles(gitApi as any, "repo-1", 1);
+    expect(result[0].diff).not.toBeNull();
+    // 追加行（+）と削除行（-）が含まれる
+    expect(result[0].diff).toContain("+");
+    expect(result[0].diff).toContain("-");
+    // 変更なしのコンテキスト行（line1, line3）が含まれる
+    expect(result[0].diff).toContain("line1");
+    expect(result[0].diff).toContain("line3");
+  });
+
+  test("編集ファイル: ベースのコンテンツ取得失敗時は空ベースとして diff を計算する", async () => {
+    let callCount = 0;
+    const gitApi = makeMockGitApi({
+      getPullRequest: jest.fn().mockResolvedValue({
+        sourceRefName: "refs/heads/feature",
+        targetRefName: "refs/heads/main",
+      }),
+      getPullRequestIterations: jest.fn().mockResolvedValue([{ id: 1 }]),
+      getPullRequestIterationChanges: jest.fn().mockResolvedValue({
+        changeEntries: [{ item: { path: "/src/calc.ts" }, changeType: 2 }],
+      }),
+      getItemContent: jest.fn().mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve(makeStream("new content"));
+        return Promise.reject(new Error("Not found"));
+      }),
+    });
+
+    const result = await getChangedFiles(gitApi as any, "repo-1", 1);
+    expect(result[0].content).toBe("new content");
+    // ベース取得失敗 → 空ベースからの diff（全行追加）
+    expect(result[0].diff).not.toBeNull();
+    expect(result[0].diff?.split("\n").every((line) => line.startsWith("+"))).toBe(true);
+  });
+});
+
+// ─── computeDiffContent ───────────────────────────────────────────────────────
+describe("computeDiffContent", () => {
+  test("変更がない場合は空文字列を返す", () => {
+    const content = "line1\nline2\nline3";
+    expect(computeDiffContent(content, content)).toBe("");
+  });
+
+  test("どちらも空の場合は空文字列を返す", () => {
+    expect(computeDiffContent("", "")).toBe("");
+  });
+
+  test("追加ファイル (旧が空) は全行が + になる", () => {
+    const result = computeDiffContent("", "line1\nline2");
+    expect(result).toContain("+    1 | line1");
+    expect(result).toContain("+    2 | line2");
+    expect(result).not.toContain("-");
+  });
+
+  test("削除ファイル (新が空) は全行が - になる", () => {
+    const result = computeDiffContent("line1\nline2", "");
+    expect(result).toContain("-      | line1");
+    expect(result).toContain("-      | line2");
+    expect(result).not.toContain("+");
+  });
+
+  test("1行追加の差分を正しく出力する", () => {
+    const result = computeDiffContent("line1\nline3", "line1\nline2\nline3");
+    expect(result).toContain("+    2 | line2");
+    // コンテキスト行も含まれる
+    expect(result).toContain("line1");
+    expect(result).toContain("line3");
+  });
+
+  test("1行削除の差分を正しく出力する", () => {
+    const result = computeDiffContent("line1\nline2\nline3", "line1\nline3");
+    expect(result).toContain("-      | line2");
+    expect(result).toContain("line1");
+    expect(result).toContain("line3");
+  });
+
+  test("行の変更（削除 + 追加）を正しく出力する", () => {
+    const result = computeDiffContent("a\nold\nb", "a\nnew\nb");
+    expect(result).toContain("-      | old");
+    expect(result).toContain("+    2 | new");
+    expect(result).toContain("a");
+    expect(result).toContain("b");
+  });
+
+  test("行番号は新ファイルの行番号を使用する", () => {
+    const result = computeDiffContent("x\ny\nz", "x\ny\nz\nadded");
+    // "added" は4行目
+    expect(result).toContain("+    4 | added");
+  });
+
+  test("コンテキスト行は変更行の前後 contextLines 行を含む", () => {
+    // 10行のファイルで5行目だけ変更
+    const oldLines = Array.from({ length: 10 }, (_, i) => `line${i + 1}`).join("\n");
+    const newLines = oldLines.replace("line5", "line5_new");
+    const result = computeDiffContent(oldLines, newLines, 2);
+    // 変更行の前後2行が含まれる
+    expect(result).toContain("line3");
+    expect(result).toContain("line4");
+    expect(result).toContain("line6");
+    expect(result).toContain("line7");
+    // 遠い行は含まれない
+    expect(result).not.toContain("line1");
+    expect(result).not.toContain("line10");
+  });
+
+  test("離れた複数の変更箇所は @@ で区切られる", () => {
+    // 1行目と10行目を変更
+    const oldLines = Array.from({ length: 10 }, (_, i) => `line${i + 1}`).join("\n");
+    const newLines = oldLines.replace("line1", "line1_new").replace("line10", "line10_new");
+    const result = computeDiffContent(oldLines, newLines, 1);
+    expect(result).toContain("@@");
+  });
+
+  test("隣接する変更箇所は @@ で区切られない", () => {
+    // 2行目と3行目を変更（コンテキスト=1 で隣接する）
+    const oldLines = "a\nb\nc\nd";
+    const newLines = "a\nB\nC\nd";
+    const result = computeDiffContent(oldLines, newLines, 1);
+    // 変更が隣接しているため @@ は挿入されない
+    expect(result).not.toContain("@@");
+  });
+
+  test("削除行には行番号が付かない", () => {
+    const result = computeDiffContent("removed\nkept", "kept");
+    // 削除行のフォーマット: `-      | content`
+    expect(result).toMatch(/-\s+\| removed/);
+    // + で始まる行番号付き行は含まれない
+    expect(result).not.toMatch(/\+\s+\d+\s+\|/);
   });
 });

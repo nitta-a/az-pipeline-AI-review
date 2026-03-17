@@ -73,6 +73,11 @@ describe("constants", () => {
     expect(SYSTEM_PROMPT).toContain("必ず提示");
   });
 
+  test("SYSTEM_PROMPT にコンテキスト行への指摘禁止が含まれる", () => {
+    expect(SYSTEM_PROMPT).toContain("コンテキスト行");
+    expect(SYSTEM_PROMPT).toContain("禁止");
+  });
+
   test("MAX_KNOWLEDGE_FILES が 5", () => {
     expect(MAX_KNOWLEDGE_FILES).toBe(5);
   });

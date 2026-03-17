@@ -1,4 +1,4 @@
-import { formatReviewComment, parseIssueLocation, splitIntoComments } from "../src/index";
+import { extractChangedLineNumbers, formatReviewComment, parseIssueLocation, splitIntoComments } from "../src/index";
 import { AI_REVIEW_MARKER } from "../src/constants";
 
 describe("formatReviewComment", () => {
@@ -152,5 +152,71 @@ describe("parseIssueLocation", () => {
 
   test("空文字列は null を返す", () => {
     expect(parseIssueLocation("")).toBeNull();
+  });
+});
+
+describe("extractChangedLineNumbers", () => {
+  test("null を渡すと null を返す", () => {
+    expect(extractChangedLineNumbers(null)).toBeNull();
+  });
+
+  test("空文字列は空のセットを返す", () => {
+    const result = extractChangedLineNumbers("");
+    expect(result).not.toBeNull();
+    expect(result!.size).toBe(0);
+  });
+
+  test("追加行（+マーカー）の行番号を抽出する", () => {
+    const diff = [
+      "     1 | const a = 1;",
+      "+    2 | const b = 2;",
+      "+    3 | const c = 3;",
+      "     4 | const d = 4;",
+    ].join("\n");
+    const result = extractChangedLineNumbers(diff);
+    expect(result).not.toBeNull();
+    expect(result!.size).toBe(2);
+    expect(result!.has(2)).toBe(true);
+    expect(result!.has(3)).toBe(true);
+  });
+
+  test("コンテキスト行と削除行は変更行に含まれない", () => {
+    const diff = [
+      "     5 | const x = 1;",
+      "-      | const old = 2;",
+      "+    6 | const newVal = 3;",
+      "     7 | const y = 4;",
+    ].join("\n");
+    const result = extractChangedLineNumbers(diff);
+    expect(result).not.toBeNull();
+    expect(result!.size).toBe(1);
+    expect(result!.has(6)).toBe(true);
+    // コンテキスト行は含まれない
+    expect(result!.has(5)).toBe(false);
+    expect(result!.has(7)).toBe(false);
+  });
+
+  test("ハンク区切り（@@）は無視される", () => {
+    const diff = [
+      "+    1 | line1",
+      "@@",
+      "+   10 | line10",
+    ].join("\n");
+    const result = extractChangedLineNumbers(diff);
+    expect(result).not.toBeNull();
+    expect(result!.size).toBe(2);
+    expect(result!.has(1)).toBe(true);
+    expect(result!.has(10)).toBe(true);
+  });
+
+  test("変更行がない差分は空のセットを返す", () => {
+    const diff = [
+      "     1 | const a = 1;",
+      "     2 | const b = 2;",
+      "-      | old line",
+    ].join("\n");
+    const result = extractChangedLineNumbers(diff);
+    expect(result).not.toBeNull();
+    expect(result!.size).toBe(0);
   });
 });

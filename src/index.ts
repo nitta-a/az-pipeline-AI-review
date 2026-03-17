@@ -48,6 +48,26 @@ export function parseIssueLocation(issueText: string): { filePath: string; lineN
 }
 
 /**
+ * unified diff テキストから変更行（`+` マーカー付き追加行）の行番号セットを抽出する。
+ * LLM の指摘が実際の変更行に対応しているかを検証するために使用する。
+ * diff が null の場合は null を返す（フィルタリング不可）。
+ */
+export function extractChangedLineNumbers(diff: string | null): Set<number> | null {
+  if (diff === null) {
+    return null;
+  }
+  const changed = new Set<number>();
+  for (const line of diff.split("\n")) {
+    // 追加行: `+    N | content` — N は5桁右詰めの行番号
+    const match = line.match(/^\+\s*(\d+)\s*\|/);
+    if (match) {
+      changed.add(Number.parseInt(match[1], 10));
+    }
+  }
+  return changed;
+}
+
+/**
  * 指定されたミリ秒数だけ非同期に待機する。
  * API レート制限（TPM/RPM）に抵触しないよう、LLM リクエスト間に挿入するために使用する。
  */
@@ -169,11 +189,28 @@ async function run() {
           `### [${file.changeLabel}] \`${file.path}\`\n` + "```" + ext + "\n" + contentWithLineNumbers + "\n```";
       }
 
+      // 変更行の行番号セットを抽出（差分がない場合は null → フィルタリングしない）
+      const changedLines = extractChangedLineNumbers(file.diff);
+      if (changedLines) {
+        console.log(`変更行番号: [${[...changedLines].sort((a, b) => a - b).join(", ")}]`);
+      }
+
+      // LLM に送信するデータをログ出力（デバッグ用可視化）
+      console.log("##[group]📤 LLM 送信データ");
+      console.log(`--- ユーザーメッセージ（プロンプト） ---\n${fileDiffText}`);
+      if (knowledgeContext) {
+        console.log(`--- ナレッジコンテキスト ---\n${knowledgeContext}`);
+      }
+      console.log("##[endgroup]");
+
       console.log(`LLM (${connParams.provider}) にレビューを依頼しています...`);
-      // コード内容・プロンプト全文・LLM の生レスポンスはログに出力しない
       const fileReview = await callLlm(connParams, fileDiffText, knowledgeContext || undefined);
 
-      // 統計情報のみをログに出力（コード内容は含めない）
+      // LLM の生レスポンスをログ出力
+      console.log("##[group]📥 LLM レスポンス");
+      console.log(fileReview);
+      console.log("##[endgroup]");
+
       const issues = splitIntoComments(fileReview);
       console.log(`LLM から ${issues.length} 件の指摘を受け取りました。`);
       console.log("##[endgroup]");
@@ -191,6 +228,14 @@ async function run() {
         // 指摘テキストから行番号を解析してインラインコメントのコンテキストを構築する
         const location = parseIssueLocation(issue);
         const lineNumber = location?.lineNumber ?? null;
+
+        // 変更行フィルタリング: 差分データがあり、指摘の行番号が変更行に含まれない場合はスキップ
+        if (lineNumber !== null && changedLines !== null && !changedLines.has(lineNumber)) {
+          console.log(
+            `⚠️ 変更行以外への指摘をスキップしました: ${file.path}:${lineNumber} (変更行: [${[...changedLines].sort((a, b) => a - b).join(", ")}])`,
+          );
+          continue;
+        }
         const threadContext =
           lineNumber !== null
             ? {

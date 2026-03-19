@@ -3,7 +3,7 @@ import * as azdev from "azure-devops-node-api";
 import type { IGitApi } from "azure-devops-node-api/GitApi";
 import * as tl from "azure-pipelines-task-lib/task";
 import { deleteExistingAiReviewComments, getChangedFiles } from "./azureDevOps";
-import { AI_REVIEW_MARKER, RATE_LIMIT_DELAY_MS } from "./constants";
+import { AI_REVIEW_MARKER, RATE_LIMIT_DELAY_MS, SKIP_LOG_PREVIEW_CHARS } from "./constants";
 import { indexKnowledgeFiles, loadKnowledgeContents } from "./knowledge";
 import { callLlm, selectKnowledgeFiles } from "./llm";
 import { parseConnectionString } from "./types";
@@ -217,6 +217,16 @@ async function run() {
 
       // 指摘1件ごとに個別スレッドとして投稿
       for (const issue of issues) {
+        const location = parseIssueLocation(issue);
+
+        // フォーマット外の出力（雑談や指摘なしのテキスト）を除外
+        if (!location) {
+          console.log(`フォーマットに一致しないためスキップしました: ${issue.substring(0, SKIP_LOG_PREVIEW_CHARS)}...`);
+          continue;
+        }
+
+        const lineNumber = location.lineNumber;
+
         const commentBody = formatReviewComment(`### [${file.changeLabel}] \`${file.path}\`\n\n${issue}`);
 
         // 重複チェック
@@ -224,10 +234,6 @@ async function run() {
           continue;
         }
         postedComments.add(commentBody);
-
-        // 指摘テキストから行番号を解析してインラインコメントのコンテキストを構築する
-        const location = parseIssueLocation(issue);
-        const lineNumber = location?.lineNumber ?? null;
 
         // 変更行フィルタリング: 差分データがあり、指摘の行番号が変更行に含まれない場合はスキップ
         if (lineNumber !== null && changedLines !== null && !changedLines.has(lineNumber)) {
